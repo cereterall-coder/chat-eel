@@ -1,0 +1,54 @@
+GUÍA DE INSTALACIÓN EN LA EMPRESA
+==================================
+
+¡Felicidades por terminar el sistema Chat-EEL!
+Aquí tienes los pasos para pasarlo de tu casa al servidor de la empresa.
+
+PASO 1: PREPARAR LOS ARCHIVOS
+-----------------------------
+1. En tu computadora de casa, copia toda la carpeta "Chat_ELL".
+   (Asegúrate de llevar el archivo 'server.js', 'package.json' y la carpeta 'public').
+2. Guárdala en una memoria USB o súbela a la nube (Google Drive, OneDrive).
+
+PASO 2: PREPARAR EL SERVIDOR (LA PC DE LA EMPRESA)
+--------------------------------------------------
+1. Elige la computadora que funcionará como "Servidor" (debe estar encendida siempre que quieran usar el chat).
+2. Descarga e instala NODE.JS en esa computadora (https://nodejs.org/).
+   - Instala la versión "LTS" (Recomendado).
+   - Dale "Siguiente" a todo hasta finalizar.
+
+PASO 3: INSTALAR EL SISTEMA
+---------------------------
+1. Copia tu carpeta "Chat_ELL" en el servidor (ej: en C:\Chat_ELL).
+2. Abre la carpeta, da click derecho en un espacio vacío y elige "Abrir en Terminal" (o CMD).
+3. Escribe este comando para descargar las librerías necesarias:
+   npm install
+
+PASO 4: CONFIGURAR LA RED (IMPORTANTE)
+--------------------------------------
+1. Averigua la DIRECCIÓN IP de esa computadora servidor.
+   - En el CMD escribe: ipconfig
+   - Busca "Dirección IPv4". Debería ser algo como 172.27.xx.xx.
+2. IMPORTANTE: En el archivo `server.js` ya hemos configurado el rango de IPs permitidas (172.27...), así que eso ya está listo para la seguridad.
+
+PASO 5: EJECUTAR EL CHAT
+------------------------
+1. En la terminal (dentro de la carpeta), escribe:
+   node server.js
+2. Debería decir "Chat-ELL Server running on port 3005".
+
+PASO 6: CÓMO ENTRAN LOS USUARIOS
+--------------------------------
+Desde cualquier otra PC de la empresa, abren el navegador (Chrome/Edge) y escriben:
+http://[IP_DEL_SERVIDOR]:3005
+
+Ejemplo: Si la IP del servidor es 172.27.55.10, escriben:
+http://172.27.55.10:3005
+
+CONSEJO PRO (LINK CON NOMBRE):
+Si quieres que entren usando http://chat-eel:3005 en lugar de los números:
+Opción A: Pedir al de sistemas que configure el DNS de la empresa.
+Opción B: Ejecutar el archivo `configurar_link.bat` EN CADA COMPUTADORA de los usuarios (editándolo para que apunte a la IP del servidor, no a 127.0.0.1).
+
+SOLUCIÓN DE PROBLEMAS:
+- Si no conecta, revisa el FIREWALL de Windows en el servidor. Debes permitir el puerto 3005 (Regla de entrada > Puerto TCP 3005 > Permitir).

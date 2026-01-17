@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat-EEL | Panel Auditoría</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=League+Gothic&display=swap"
+        rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .font-logo {
+            font-family: 'League Gothic', sans-serif;
+            letter-spacing: 0.05em;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+
+    <!-- Auth Protection -->
+    <div id="auth-screen" class="fixed inset-0 bg-gray-900 z-50 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-80 text-center">
+            <h2 class="text-3xl text-gray-800 mb-4 font-logo tracking-wide">Acceso de Auditor</h2>
+            <input type="password" id="admin-key"
+                class="w-full border-2 border-gray-200 p-2 rounded-lg mb-4 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
+                placeholder="Clave de Administrador">
+            <button onclick="authenticate()"
+                class="w-full bg-red-800 text-white p-2 rounded-lg font-bold hover:bg-red-900 transition">
+                VER REGISTROS
+            </button>
+            <p id="auth-error" class="text-red-500 text-xs mt-2 hidden">Clave incorrecta</p>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboard" class="hidden container mx-auto p-6">
+        <header class="flex justify-between items-center mb-8 bg-white p-4 rounded-lg shadow-sm">
+            <div>
+                <h1 class="text-4xl font-logo tracking-wide text-gray-800">Chat-EEL <span
+                        class="text-red-600">AUDITORÍA</span></h1>
+                <p class="text-sm text-gray-500">Panel de Control de Mensajes y Seguridad</p>
+            </div>
+            <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500 underline">Cerrar
+                Auditoría</button>
+        </header>
+
+        <!-- Filters -->
+        <div class="bg-white p-4 rounded-lg shadow-sm mb-6 flex gap-4 items-center">
+            <div class="flex-1">
+                <input type="text" id="filter-user" onkeyup="renderLogs()"
+                    class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500"
+                    placeholder="Filtrar por usuario (remitente o destinatario)...">
+            </div>
+            <div class="flex-1">
+                <input type="text" id="filter-content" onkeyup="renderLogs()"
+                    class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500"
+                    placeholder="Buscar en contenido del mensaje...">
+            </div>
+            <button onclick="fetchLogs()" class="bg-gray-100 p-2 rounded hover:bg-gray-200 text-gray-600">
+                🔄 Recargar
+            </button>
+        </div>
+
+        <!-- Danger Zone -->
+        <div
+            class="bg-red-50 p-4 rounded-lg shadow-sm mb-6 flex flex-wrap gap-4 items-center border border-red-100 justify-between">
+            <div class="flex items-center gap-3">
+                <span class="text-sm font-bold text-red-800 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Eliminar Registros:
+                </span>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-red-600">Desde</span>
+                    <input type="date" id="del-start"
+                        class="border border-red-200 bg-white p-1 rounded text-sm focus:outline-none focus:border-red-500 text-gray-600">
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-red-600">Hasta</span>
+                    <input type="date" id="del-end"
+                        class="border border-red-200 bg-white p-1 rounded text-sm focus:outline-none focus:border-red-500 text-gray-600">
+                </div>
+            </div>
+            <button onclick="deleteLogs()"
+                class="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700 font-bold transition shadow hover:shadow-md">
+                ELIMINAR
+            </button>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+            <table class="w-full text-sm text-left text-gray-500">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+                    <tr>
+                        <th class="px-6 py-3">Fecha / Hora</th>
+                        <th class="px-6 py-3">Remitente</th>
+                        <th class="px-6 py-3">Destinatario</th>
+                        <th class="px-6 py-3 w-1/2">Mensaje</th>
+                        <th class="px-6 py-3">Tipo</th>
+                    </tr>
+                </thead>
+                <tbody id="logs-body">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+
+        <p class="text-center text-xs text-gray-400 mt-6">Sistema desarrollado por Ing. A. Alexis V. Vargas</p>
+    </div>
+
+    <script>
+        // Use a simple local key for now. In production, this verifies with server.
+        // We set it to match the server check 'Alexis2026'
+        const CORRECT_KEY = 'Alexis2026';
+        let allLogs = [];
+
+        function authenticate() {
+            const input = document.getElementById('admin-key').value;
+            // First pass client check for UI switch, actual data fetch will verify with server header
+            if (input === CORRECT_KEY) {
+                document.getElementById('auth-screen').style.display = 'none';
+                document.getElementById('dashboard').classList.remove('hidden');
+                fetchLogs();
+            } else {
+                document.getElementById('auth-error').classList.remove('hidden');
+            }
+        }
+
+        async function fetchLogs() {
+            try {
+                const res = await fetch('/api/audit', {
+                    headers: { 'x-admin-key': CORRECT_KEY }
+                });
+                if (res.ok) {
+                    allLogs = await res.json();
+
+                    // Sort by newest first
+                    allLogs.sort((a, b) => b.timestamp - a.timestamp);
+
+                    renderLogs();
+                } else {
+                    alert("Error de autorización con el servidor.");
+                }
+            } catch (e) {
+                console.error(e);
+                alert("No se pudo conectar con el servidor.");
+            }
+        }
+
+        function renderLogs() {
+            const tbody = document.getElementById('logs-body');
+            const searchUser = document.getElementById('filter-user').value.toLowerCase();
+            const searchContent = document.getElementById('filter-content').value.toLowerCase();
+
+            tbody.innerHTML = '';
+
+            const filtered = allLogs.filter(log => {
+                // If log user, check sender, senderId, or targetId (if private)
+                const senderMatch = (log.sender || '').toLowerCase().includes(searchUser);
+                // For target, simplistic check. Real system would map IDs to names, but here we just have IDs mostly
+                // If general broadcast, target is General.
+                // Log doesn't always have targetName unless we map it. 
+                // We'll rely on text search mostly.
+
+                const contentMatch = (log.text || '').toLowerCase().includes(searchContent);
+                return senderMatch && contentMatch;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No se encontraron registros.</td></tr>';
+                return;
+            }
+
+            filtered.forEach(log => {
+                const date = new Date(log.timestamp).toLocaleString('es-PE');
+                const isPrivate = log.isPrivate;
+                const typeStyle = isPrivate
+                    ? '<span class="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5 rounded">Privado</span>'
+                    : '<span class="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded">Público</span>';
+
+                // Construct displays with IP if available
+                const senderDisplay = log.senderIp ? `${log.sender} <br><span class="text-xs text-gray-400 font-mono">(${log.senderIp})</span>` : log.sender;
+
+                let targetDisplay = 'Sala General';
+                if (isPrivate) {
+                    const tName = log.targetName || log.targetId || 'Desconocido';
+                    const tIp = log.targetIp ? `<br><span class="text-xs text-gray-400 font-mono">(${log.targetIp})</span>` : '';
+                    targetDisplay = `${tName} ${tIp}`;
+                }
+
+                const tr = document.createElement('tr');
+                tr.className = 'bg-white border-b hover:bg-gray-50';
+                tr.innerHTML = `
+                    <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${date}</td>
+                    <td class="px-6 py-4 font-bold text-gray-800">${senderDisplay}</td>
+                    <td class="px-6 py-4 text-gray-600 font-medium">${targetDisplay}</td>
+                    <td class="px-6 py-4 text-gray-700">${log.text}</td>
+                    <td class="px-6 py-4">${typeStyle}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function logout() {
+            location.reload();
+        }
+
+        // Enter key for auth
+        document.getElementById('admin-key').addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') authenticate();
+        });
+
+        async function deleteLogs() {
+            const start = document.getElementById('del-start').value;
+            const end = document.getElementById('del-end').value;
+
+            if (!start || !end) return alert('Por favor selecciona la fecha de INICIO y FIN para eliminar.');
+
+            if (!confirm(`⚠️ ¿Estás seguro de ELIMINAR permanentemente los chats desde ${start} hasta ${end}? Esta acción no se puede deshacer.`)) return;
+
+            // Make 'end' cover the full day (23:59:59)
+            // 'start' is already 00:00:00 local usually when parsing YYYY-MM-DD string with new Date in local text context, 
+            // but beware of timezone. Using "YYYY-MM-DD" + "T00:00:00" ensures local start.
+            // A simple method is just use timestamps of Date objects created from the input value string, which browser interprets as local midnight usually.
+
+            // To be precise:
+            // Input: "2023-01-01" -> Date("2023-01-01") is UTC midnight in some contexts or Local in others.
+            // Let's explicitly append time for safety or rely on browser.
+            // Actually, best is:
+            const sTime = new Date(start + 'T00:00:00').getTime();
+            const eTime = new Date(end + 'T23:59:59').getTime();
+
+            try {
+                const res = await fetch('/api/audit/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-admin-key': CORRECT_KEY
+                    },
+                    body: JSON.stringify({
+                        start: sTime,
+                        end: eTime
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(`✅ Listo. Se han eliminado ${data.deleted} registros.`);
+                    fetchLogs(); // Refresh
+                } else {
+                    alert('Error: ' + (data.error || 'Desconocido'));
+                }
+            } catch (e) {
+                console.error(e);
+                alert('No se pudo conectar con el servidor para eliminar.');
+            }
+        }
+    </script>
+</body>
+
+</html>
