@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat-ELL | Intranet</title>
+    <title>Chat-ELL | Supervisor</title>
+    <link rel="icon" type="image/png" href="/logo.png">
     <!-- Font for Elegance -->
     <link
         href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@400;500;600&family=League+Gothic&family=Caveat:wght@400;700&display=swap"
@@ -38,6 +39,49 @@
             background-color: #e5ddd5;
             background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
             opacity: 0.1;
+        }
+
+        /* Hide default browser password eye */
+        input::-ms-reveal,
+        input::-ms-clear {
+            display: none;
+        }
+
+        /* Persistent Super Alert */
+        #super-alert {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-left: 6px solid #ef4444;
+            /* Red border */
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            z-index: 9999;
+            transform: translateX(120%);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            align-items: start;
+            gap: 15px;
+            max-width: 350px;
+        }
+
+        #super-alert.show {
+            transform: translateX(0);
+        }
+
+        .super-alert-close {
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            cursor: pointer;
+            color: #999;
+            font-size: 18px;
+        }
+
+        .super-alert-close:hover {
+            color: #333;
         }
     </style>
 </head>
@@ -79,7 +123,7 @@
                         class="w-full bg-gray-50 border-2 border-gray-100 p-2 pl-4 pr-10 rounded-xl shadow-md focus:outline-none focus:border-green-600 focus:bg-white transition-all text-gray-700 font-medium placeholder-gray-400 text-sm"
                         placeholder="Contraseña de Acceso" maxlength="20">
                     <button type="button" onclick="togglePasswordVisibility()"
-                        class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-green-700 transition focus:outline-none">
+                        class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-green-700 transition focus:outline-none z-10">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor" id="eye-icon">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -102,7 +146,7 @@
 
             <div class="mt-5 pt-3 border-t border-gray-50">
                 <div class="text-sm text-green-800 font-bold tracking-wide font-hand leading-none whitespace-nowrap">
-                    Copy right: Ing. A. Alexis V. Vargas - Tfno: 944499069</div>
+                    Copy Right 2026: Ing. A. Alexis V. Vargas - Tfno: 944499069</div>
                 <div
                     class="text-sm text-green-800 font-bold tracking-wide font-hand mt-1 leading-none whitespace-nowrap">
                     Colaboración:
@@ -117,27 +161,55 @@
         <!-- Sidebar (User List) -->
         <div class="w-full md:w-80 lg:w-96 border-r border-gray-200 flex flex-col h-full bg-white z-20">
             <!-- Header sidebar -->
-            <div class="bg-green-800 p-4 flex items-center justify-between h-16 shadow-md z-10">
+            <!-- Sidebar Header -->
+            <div class="p-4 bg-gray-50 border-b flex justify-between items-center sticky top-0 z-10 shadow-sm h-20">
                 <div class="flex items-center gap-3">
-                    <img src="/logo.png" alt="Logo" class="w-10 h-10 object-contain bg-white rounded-full p-1">
+                    <img src="/logo.png" alt="Logo"
+                        class="w-10 h-10 object-contain bg-white rounded-full p-1 shadow-sm">
                     <div>
-                        <span class="text-white text-2xl block leading-tight font-logo tracking-wide">Chat-EEL</span>
+                        <h2 class="font-logo text-2xl tracking-wide text-gray-800 leading-none">Chat-EEL</h2>
+                        <div class="flex items-center gap-1 mt-0.5" id="user-status-display">
+                            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span class="text-[10px] text-gray-500 font-medium uppercase tracking-wider"
+                                id="my-username-display">CONECTADO</span>
+                        </div>
                     </div>
                 </div>
+                <button onclick="logout()"
+                    class="text-gray-400 hover:text-red-500 transition p-2 rounded-full hover:bg-gray-100"
+                    title="Cerrar Sesión">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                </button>
             </div>
 
-            <!-- User List -->
-            <div class="flex-1 overflow-y-auto p-2">
-                <div
-                    class="px-4 py-3 text-xs font-bold text-green-800 uppercase tracking-widest bg-gray-50 rounded mb-2 border-b border-gray-100">
-                    Usuarios Activos
-                </div>
-                <ul id="user-list" class="space-y-1">
-                    <!-- Populated by JS -->
-                </ul>
+            <!-- Search Bar -->
+            <!-- Search Bar & Filter -->
+            <div class="px-4 py-2 bg-white border-b flex gap-2 items-center">
+                <input type="text" id="search-users" onkeyup="updateUserListUI()"
+                    class="flex-1 bg-gray-100 border-none text-xs rounded-full px-4 py-2 focus:ring-2 focus:ring-green-500/50 outline-none transition"
+                    placeholder="Buscar usuario o IP...">
+                <button onclick="toggleUserFilter()" id="filter-btn"
+                    class="p-2 rounded-full bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-600 transition"
+                    title="Ver solo chats activos">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    </svg>
+                </button>
             </div>
 
-            <div class="p-3 bg-gray-50 text-[10px] text-center text-gray-400 border-t uppercase tracking-widest">
+            <!-- Users List -->
+            <ul id="user-list" class="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                <!-- Dynamic Users -->
+            </ul>
+
+            <div
+                class="p-2 bg-gray-50 text-[10px] text-center text-gray-400 border-t uppercase tracking-widest hidden md:block">
                 Intranet Segura
             </div>
         </div>
@@ -186,6 +258,21 @@
             <!-- Input Area -->
             <div class="bg-gray-100 p-4 z-10 border-t border-gray-200">
                 <form onsubmit="sendMessage(event)" class="flex gap-3 max-w-4xl mx-auto relative">
+                    <!-- Hidden File Input -->
+                    <input type="file" id="image-input" accept="image/*" class="hidden"
+                        onchange="handleImageSelect(this)">
+
+                    <!-- Attachment Button -->
+                    <button type="button" onclick="document.getElementById('image-input').click()"
+                        class="text-gray-400 hover:text-gray-600 transition p-2 rounded-full hover:bg-gray-100 cursor-pointer relative z-20 shrink-0"
+                        title="Enviar Imagen">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 pointer-events-none" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+
                     <!-- Emoji Button -->
                     <button type="button" onclick="toggleEmojiPicker()"
                         class="text-gray-400 hover:text-yellow-500 transition p-2 rounded-full hover:bg-gray-100">
@@ -220,10 +307,39 @@
     </div>
 
     <!-- Notification Toast -->
+    <!-- Notification Toast (Standard) -->
     <div id="toast"
         class="fixed top-5 right-5 bg-gray-800 text-white px-6 py-4 rounded-lg shadow-2xl transform translate-x-[150%] transition-transform duration-500 z-50 flex items-center gap-3 border-l-4 border-green-500">
         <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span id="toast-msg">Notificación</span>
+    </div>
+
+    <!-- Super Supervisor Alert (Persistent) -->
+    <div id="super-alert">
+        <div class="super-alert-close" onclick="closeSuperAlert()">×</div>
+        <div class="bg-red-100 p-2 rounded-full text-red-500 shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+        </div>
+        <div>
+            <h4 class="font-bold text-gray-800 text-sm mb-1">¡Nuevo Mensaje!</h4>
+            <p id="super-alert-msg" class="text-sm text-gray-600 leading-snug">...</p>
+            <button id="super-alert-btn"
+                class="mt-2 text-xs font-bold text-red-500 hover:text-red-700 uppercase tracking-wide">VER
+                AHORA</button>
+        </div>
+    </div>
+
+    <!-- Image Modal (Lightbox) -->
+    <div id="image-modal"
+        class="fixed inset-0 bg-black/90 z-[100] hidden flex items-center justify-center p-4 cursor-pointer"
+        onclick="closeImageModal()">
+        <img id="image-modal-img" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+            class="max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-transform duration-300 transform scale-100 hover:scale-[1.02]">
+        <button class="absolute top-5 right-5 text-white/50 hover:text-white text-4xl font-bold">&times;</button>
     </div>
 
     <!-- Client Logic -->
@@ -259,6 +375,11 @@
 
             const name = nameInput.value.trim();
             const password = passInput.value.trim();
+
+            // Request Notification Permission on first interaction (Login Click)
+            if ("Notification" in window && Notification.permission === "default") {
+                Notification.requestPermission();
+            }
 
             if (!name) {
                 errDiv.textContent = 'El nombre es obligatorio';
@@ -340,19 +461,88 @@
         });
 
 
+        let hideInactive = false; // Filter state
+
+        function toggleUserFilter() {
+            hideInactive = !hideInactive;
+            const btn = document.getElementById('filter-btn');
+            if (hideInactive) {
+                btn.classList.add('bg-green-500', 'text-white');
+                btn.classList.remove('bg-gray-100', 'text-gray-400');
+            } else {
+                btn.classList.remove('bg-green-500', 'text-white');
+                btn.classList.add('bg-gray-100', 'text-gray-400');
+            }
+            updateUserListUI();
+        }
+
+        let favorites = JSON.parse(localStorage.getItem('chat_favorites') || '[]');
+
+        function toggleFavorite(id, event) {
+            event.stopPropagation();
+            if (favorites.includes(id)) {
+                favorites = favorites.filter(fid => fid !== id);
+            } else {
+                favorites.push(id);
+            }
+            localStorage.setItem('chat_favorites', JSON.stringify(favorites));
+            updateUserListUI();
+        }
 
         function updateUserListUI() {
-            // Logic duplicated from above, using lastUsers
-            if (!lastUsers) return;
+            const userList = document.getElementById('user-list');
+            const searchTerm = (document.getElementById('search-users')?.value || '').toLowerCase();
 
-            const listHtml = lastUsers.filter(u => u.id !== socket.id).map(u => {
-                const unreadCount = chats[u.id]?.unread || 0;
+            // Filter out myself
+            let users = lastUsers.filter(u => u.id !== socket.id);
+
+            // 1. Text Search Filtering
+            if (searchTerm) {
+                users = users.filter(u =>
+                    u.name.toLowerCase().includes(searchTerm) ||
+                    (u.ip || '').includes(searchTerm)
+                );
+            } else if (hideInactive) {
+                // 2. Hide Inactive (if no search term)
+                // Keep if: Favorite OR Has Messages OR Has Unread OR Is Active Chat
+                users = users.filter(u => {
+                    const isFav = favorites.includes(u.id);
+                    const hasMsgs = chats[u.id] && chats[u.id].messages.length > 0;
+                    const hasUnread = chats[u.id] && chats[u.id].unread > 0;
+                    const isActive = activeChat === u.id;
+                    return isFav || hasMsgs || hasUnread || isActive;
+                });
+            }
+
+            // Sorting: Favorites > Active Chats (Unread/History) > Alphabetical
+            users.sort((a, b) => {
+                const aFav = favorites.includes(a.id);
+                const bFav = favorites.includes(b.id);
+                if (aFav && !bFav) return -1;
+                if (!aFav && bFav) return 1;
+
+                const aActive = (chats[a.id]?.messages.length > 0 || chats[a.id]?.unread > 0);
+                const bActive = (chats[b.id]?.messages.length > 0 || chats[b.id]?.unread > 0);
+                if (aActive && !bActive) return -1;
+                if (!aActive && bActive) return 1;
+
+                return a.name.localeCompare(b.name);
+            });
+
+            if (users.length === 0 && hideInactive && !searchTerm) {
+                userList.innerHTML = '<div class="text-center p-4 text-xs text-gray-400 italic mt-4">No hay chats activos.<br>Desactiva el filtro para ver a todos.</div>';
+                return;
+            }
+
+            const listHtml = users.map(u => {
+                const unreadCount = chats[u.id] ? chats[u.id].unread : 0;
                 const isSelected = activeChat === u.id;
+                const isFav = favorites.includes(u.id);
 
                 return `
                 <li onclick="selectChat('${u.id}', '${u.name}')" 
                     title="IP: ${u.ip || 'Desconocida'}"
-                    class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition group border-l-4 
+                    class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition group border-l-4 relative
                     ${isSelected ? 'bg-gray-100 border-green-800' : 'hover:bg-gray-50 border-transparent'}">
                     
                     <div class="relative">
@@ -364,12 +554,23 @@
                     
                     <div class="flex-1 min-w-0">
                         <div class="flex justify-between items-center">
-                            <div class="font-medium text-gray-800 truncate">${u.name}</div>
+                            <div class="font-medium text-gray-800 truncate flex items-center gap-1">
+                                ${u.name}
+                                ${isFav ? '<span class="text-yellow-400 text-[10px]">★</span>' : ''}
+                            </div>
                             ${unreadCount > 0 ?
                         `<div class="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm animate-pulse">${unreadCount}</div>`
                         : ''}
                         </div>
-                        <div class="text-[10px] text-gray-400 truncate">En línea</div>
+                        <div class="text-[10px] text-gray-400 truncate">${u.ip || 'En línea'}</div>
+                    </div>
+
+                    <!-- Favorite Star (Visible on hover or if favored) -->
+                    <div onclick="toggleFavorite('${u.id}', event)" 
+                         class="absolute right-2 top-2 p-1 text-gray-300 hover:text-yellow-400 cursor-pointer ${isFav ? 'text-yellow-400 opacity-100' : 'opacity-0 group-hover:opacity-100'} transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="${isFav ? 'currentColor' : 'none'}" viewBox="0 0 24 24" stroke="currentColor">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                        </svg>
                     </div>
                 </li>
                 `;
@@ -377,7 +578,12 @@
 
             const generalUnread = chats['general'].unread || 0;
             const generalSelected = activeChat === 'general';
-            const generalItem = `
+
+            // Only show General if it matches search text or search is empty (or search matches 'General')
+            let showGeneral = true;
+            if (searchTerm && !'sala general'.includes(searchTerm)) showGeneral = false;
+
+            const generalItem = showGeneral ? `
                 <li onclick="selectChat('general', 'Sala General')" 
                     class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition group border-l-4 mb-2
                     ${generalSelected ? 'bg-gray-100 border-green-500' : 'hover:bg-gray-50 border-transparent'}">
@@ -390,10 +596,10 @@
                             ${generalUnread > 0 ?
                     `<div class="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${generalUnread}</div>` : ''}
                         </div>
-                        <div class="text-[10px] text-gray-400">Broadcast</div>
+                        <div class="text-[10px] text-gray-400">Transmisión a todos</div>
                     </div>
                 </li>
-            `;
+            ` : '';
             userList.innerHTML = generalItem + listHtml;
         }
 
@@ -469,6 +675,85 @@
             showToast('Desconectado del servidor', true);
         });
 
+        // Helper to check permissions
+        let iAmSupervisor = false;
+
+        socket.on('login_success', (data) => {
+            myUsername = data.name;
+            myId = data.id;
+            iAmSupervisor = data.isSupervisor;
+
+            chats = { 'general': { name: 'Sala General', messages: [], unread: 0 } };
+
+            document.getElementById('my-name-display').textContent = myUsername;
+            if (iAmSupervisor) {
+                document.getElementById('my-name-display').innerHTML += ' <span class="text-xs text-yellow-600 font-bold">★ SUPERVISOR</span>';
+            }
+
+            loginScreen.classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                loginScreen.style.display = 'none';
+                appContainer.classList.remove('hidden');
+                appContainer.classList.add('flex');
+            }, 500);
+
+            if (data.isSupervisor) showToast('Bienvenido, Supervisor', false);
+        });
+
+        // Image Handling
+        function handleImageSelect(input) {
+            const file = input.files[0];
+            if (file) processImage(file);
+            input.value = ''; // Reset
+        }
+
+        // Paste Handler
+        document.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    processImage(blob);
+                }
+            }
+        });
+
+        function processImage(file) {
+            // Permission Check
+            if (activeChat !== 'general') {
+                // Private Chat Logic
+                // Allow if I am Supervisor OR Target is Supervisor
+                const targetUser = lastUsers.find(u => u.id === activeChat);
+                const targetIsSupervisor = targetUser && targetUser.isSupervisor; // Need to ensure server sends this in update_user_list
+
+                if (!iAmSupervisor && !targetIsSupervisor) {
+                    showToast('⚠️ Solo se pueden enviar imágenes al Supervisor o en la Sala General.', true);
+                    return;
+                }
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const base64 = e.target.result;
+                sendImage(base64);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function sendImage(base64) {
+            const payload = {
+                text: '📷 Imagen',
+                image: base64,
+                sender: myUsername
+            };
+
+            if (activeChat === 'general') {
+                socket.emit('chat_message', payload);
+            } else {
+                socket.emit('private_message', { targetId: activeChat, ...payload });
+            }
+        }
+
         // --- Functions ---
 
         function sendMessage(e) {
@@ -477,7 +762,11 @@
             if (!text) return;
 
             if (activeChat === 'general') {
-                socket.emit('chat_message', text);
+                socket.emit('chat_message', text); // Ensure server handles string vs object logic or update server to expect object? 
+                // Server expects 'msg' as string usually for chat_message based on previous read. 
+                // Wait, if I change client to emit object, server 'chat_message' handler needs update.
+                // Current server: socket.on('chat_message', (msg) => { const text = msg; ... }) ?
+                // Let's check server.js line 265.
             } else {
                 socket.emit('private_message', { targetId: activeChat, text: text });
             }
@@ -485,37 +774,219 @@
             msgInput.value = '';
         }
 
-        msgInput.addEventListener('input', () => {
-            // Typing logic...
-            socket.emit('typing', activeChat === 'general' ? null : activeChat);
-        });
-
-        function appendMessageUI(msg) {
-            // Determine if message is mine
-            // Check both senderId (best) or name
+        function addMsgToUI(msg, method = 'prepend') {
             const isMe = msg.senderId === socket.id || msg.sender === myUsername;
 
             const div = document.createElement('div');
-            div.className = `flex mb-2 ${isMe ? 'justify-end' : 'justify-start'} w-full`;
-
+            div.className = `flex w-full mb-4 px-2 ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in-up`;
             const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+            // Image Content
+            let contentHtml = `<div class="pb-[14px] leading-relaxed break-words">${msg.text}</div>`;
+
+            if (msg.image) {
+                // Image message
+                contentHtml = `
+                    <div class="mb-1 rounded-lg overflow-hidden relative group select-none" style="cursor: pointer;" onclick="openImageModal(this.querySelector('img').src)">
+                        <img src="${msg.image}" class="max-w-full h-auto max-h-60 object-cover bg-gray-100 relative z-0" loading="lazy">
+                        <div class="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition flex items-center justify-center z-10" style="cursor: pointer;">
+                            <span class="text-white text-xs font-bold drop-shadow-md">🔍 Ver</span>
+                        </div>
+                    </div>
+                    ${msg.text && msg.text !== '📷 Imagen' ? `<div class="pb-[14px] mt-1">${msg.text}</div>` : ''}
+                `;
+            }
+
             div.innerHTML = `
-                <div class="max-w-[75%] md:max-w-[60%] rounded-lg px-4 py-2 shadow-sm relative text-sm 
+                <div class="max-w-[75%] md:max-w-[50%] rounded-lg px-2 py-2 shadow-sm relative text-sm 
                             ${isMe ? 'bg-[#d9fdd3] rounded-tr-none text-gray-900' : 'bg-white rounded-tl-none text-gray-900'}">
                     ${!isMe && activeChat === 'general' ? `<div class="text-xs font-bold text-green-700 mb-1 opacity-90">${msg.sender}</div>` : ''}
-                    <div class="pb-[14px] leading-relaxed break-words">${msg.text}</div>
+                    
+                    ${contentHtml}
+
                     <div class="absolute bottom-1 right-2 text-[10px] text-gray-500 leading-none select-none flex items-center gap-1">
                        <span>${time}</span>
                        ${isMe ? '<span class="text-blue-500">✓✓</span>' : ''} 
                     </div>
                 </div>
             `;
-            messagesDiv.appendChild(div);
+
+            if (method === 'prepend') {
+                messagesDiv.prepend(div);
+                messagesDiv.scrollTop = 0;
+            } else {
+                messagesDiv.appendChild(div);
+                messagesDiv.scrollTop = 0;
+            }
+        }
+
+
+
+        const alertSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); // Elegant ping
+        socket.on('supervisor_alert', (data) => {
+            alertSound.play().catch(e => console.log('Audio blocked', e));
+
+            // 1. Visual Toast inside App
+            showToast(`📣 Nuevo mensaje de ${data.sender}: "${data.text.substring(0, 30)}${data.text.length > 30 ? '...' : ''}"`, false);
+
+            // 2. Super Persistent Alert (Custom HTML)
+            showSuperAlert(data.sender, data.text, data.senderId, data.isPrivate);
+
+            // 3. System Notification (Visible even if minimized/another tab)
+            if ("Notification" in window) {
+                if (Notification.permission === "granted") {
+                    const notif = new Notification(`Nuevo Mensaje de ${data.sender} `, {
+                        body: data.text,
+                        icon: '/logo.png',
+                        requireInteraction: true
+                    });
+                    notif.onclick = function () {
+                        window.focus();
+                        this.close();
+                    };
+                } else if (Notification.permission !== "denied") {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === "granted") {
+                            new Notification(`Nuevo Mensaje de ${data.sender} `, {
+                                body: data.text,
+                                icon: '/logo.png'
+                            });
+                        }
+                    });
+                }
+            }
+        });
+
+        function showSuperAlert(sender, text, senderId, isPrivate) {
+            const el = document.getElementById('super-alert');
+            const msgEl = document.getElementById('super-alert-msg');
+            const btn = document.getElementById('super-alert-btn');
+
+            msgEl.textContent = `${sender}: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`;
+
+            btn.onclick = () => {
+                window.focus();
+                if (senderId) {
+                    if (isPrivate) {
+                        selectChat(senderId, sender);
+                    } else {
+                        selectChat('general', 'Sala General');
+                    }
+                }
+                closeSuperAlert();
+            };
+
+            el.classList.add('show');
+        }
+
+        // Image Modal (Lightbox)
+        function openImageModal(src) {
+            const modal = document.getElementById('image-modal');
+            const img = document.getElementById('image-modal-img');
+            img.src = src;
+            modal.classList.remove('hidden');
+        }
+
+        function closeImageModal() {
+            document.getElementById('image-modal').classList.add('hidden');
+        }
+
+        function closeSuperAlert() {
+            document.getElementById('super-alert').classList.remove('show');
+        }
+
+        // Adjusted render for reverse order
+        function renderMessages(msgs) {
+            messagesDiv.innerHTML = '';
+            // msgs come from server. If server sends [old, ..., new], loop normally and Prepend = new will end up at top.
+            // But we reversed server history emission ([new, ..., old]).
+            // If we loop [new, ..., old] and prepend:
+            // 1. Prepend new -> [new]
+            // 2. Prepend old -> [old, new] (Wrong! we want [new, old])
+            // So if server sends [Newest, ..., Oldest]:
+            // We should APPEND them to maintain [Newest..Oldest] order in UI?
+            // Wait.
+            // UI Flex-col normal: Top is item 0.
+            // We want Top = Newest.
+            // So visual list should be:
+            // Msg N (Newest)
+            // Msg N-1
+            // ...
+            // Msg 1 (Oldest)
+
+            // Server history emission is reversed: [Newest, ..., Oldest]
+            // Iterate and APPEND to container will result in:
+            // Top: Newest
+            // Btm: Oldest
+
+            msgs.forEach(msg => {
+                // Re-use logic w/o triggering 'prepend' again if we just append?
+                // Let's manually build to be safe or just call appendMessageUI but modify it to accept an 'append' flag for history loading?
+                // Simpler: Just modify appendMessageUI to ALWAYS prepend (add to top).
+                // Then for history [New, Old], we iterate REVERSE ([Old, New])? 
+                // No.
+                // Goal:
+                // NEW
+                // OLD
+
+                // If I have New, I prepend it -> [New]
+                // Then I have Old, I prepend it -> [Old, New] -> Top is Old. WRONG.
+
+                // So if I prepend, I need to process OLDEST first.
+                // Server sends [Newest ... Oldest].
+                // So I should reverse user list to [Oldest ... Newest] and then Prepend each?
+                // [Old] -> [Old]
+                // [New] -> [New, Old] -> Top is New. CORRECT.
+                // So we need to reverse the history array received from server (which was reversed there).
+                // Server: sends [Newest...Oldest].
+                // Client: receives [Newest...Oldest].
+                // Reverse it -> [Oldest...Newest].
+                // Loop:
+                // 1. Oldest -> Prepend -> [Oldest]
+                // 2. Newer  -> Prepend -> [Newer, Oldest]
+                // Result: Newer at top. Correct.
+
+                appendMessageUI(msg);
+            });
+
+            // Actually, wait. renderMessages receives 'history'.
+            // If I just loop history [New...Old] and Append, I get:
+            // New
+            // Old
+            // That is what we want!
+
+            // So if I change appendMessageUI to PREPEND (for live incoming),
+            // then for history loading I should probably use a different method OR be careful.
+
+            // Let's separate "addMessageToUI".
+        }
+
+        // Redefined helper to support both directions
+
+
+        // Override the original appendMessageUI to use the new logic
+        function appendMessageUI(msg) {
+            addMsgToUI(msg, 'prepend');
+        }
+
+        // Update renderMessages to use append for [New...Old] list to form New->Old visual stack?
+        function renderHistoryMessages(msgs) { // msgs is [Newest ... Oldest]
+            messagesDiv.innerHTML = '';
+            msgs.forEach(msg => {
+                // If I append Newest, it goes to Top (item 0).
+                // If I append Oldest, it goes below it.
+                // Visual:
+                // Newest
+                // ...
+                // Oldest
+                // This matches "Recent at Top".
+                addMsgToUI(msg, 'append');
+            });
         }
 
         function scrollToBottom() {
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            // Logic inverted: Scroll to TOP
+            messagesDiv.scrollTop = 0;
         }
 
         function showToast(text, error = false) {
@@ -599,13 +1070,13 @@
                 icon.lastElementChild.setAttribute('d', ''); // Clear second path if complex, or just swap full innerHTML
 
                 // Simpler: Just swap innerHTML for clean Eye Slash
-                icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />`;
+                icon.innerHTML = `< path stroke - linecap="round" stroke - linejoin="round" stroke - width="2" d = "M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /> `;
 
             } else {
                 input.type = 'password';
                 icon.innerHTML = `
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    < path stroke - linecap="round" stroke - linejoin="round" stroke - width="2" d = "M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 `;
             }
         }

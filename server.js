@@ -3,7 +3,9 @@ const http = require('http');
 const { Server } = require("socket.io");
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    maxHttpBufferSize: 50 * 1024 * 1024 // 50MB
+});
 
 // --- CONFIGURATION --- //
 const ALLOWED_IP_RANGE = {
@@ -50,11 +52,31 @@ app.use(express.static('public'));
 
 // ... (rest of the file until API section)
 
-// --- API FOR AUDIT ---
-app.get('/api/audit', (req, res) => {
-    // Simple mock auth
+// --- API FOR AUDIT & ADMIN AUTH ---
+app.post('/api/audit/login', (req, res) => {
+    const { key } = req.body;
+    if (key === ADMIN_KEY) {
+        res.json({ success: true });
+    } else {
+        res.status(401).json({ error: 'Clave incorrecta' });
+    }
+});
+
+app.post('/api/audit/change_key', (req, res) => {
     const auth = req.headers['x-admin-key'];
-    if (auth !== 'Alexis2026') {
+    if (auth !== ADMIN_KEY) return res.status(403).json({ error: 'Unauthorized' });
+
+    const { newKey } = req.body;
+    if (!newKey || newKey.length < 4) return res.status(400).json({ error: 'Clave insegura (min 4 chars)' });
+
+    ADMIN_KEY = newKey;
+    saveAdminKey();
+    res.json({ success: true });
+});
+
+app.get('/api/audit', (req, res) => {
+    const auth = req.headers['x-admin-key'];
+    if (auth !== ADMIN_KEY) {
         return res.status(403).json({ error: 'Unauthorized' });
     }
 
@@ -68,7 +90,7 @@ app.get('/api/audit', (req, res) => {
 // Delete Logs API
 app.post('/api/audit/delete', (req, res) => {
     const auth = req.headers['x-admin-key'];
-    if (auth !== 'Alexis2026') return res.status(403).json({ error: 'Unauthorized' });
+    if (auth !== ADMIN_KEY) return res.status(403).json({ error: 'Unauthorized' });
 
     const { start, end } = req.body;
     if (!start || !end) return res.status(400).json({ error: 'Missing params' });
@@ -90,9 +112,12 @@ app.post('/api/audit/delete', (req, res) => {
 // --- STATE --- //
 const fs = require('fs');
 const USERS_FILE = './users.json';
+const ADMIN_KEY_FILE = './admin_key.json';
+
 let activeUsers = {}; // { socketId: { name: "User" } }
 let registeredUsers = {}; // { "User": "password" }
 let messageHistory = [];
+let ADMIN_KEY = 'Alexis2026'; // Default
 
 // Load users
 if (fs.existsSync(USERS_FILE)) {
@@ -103,9 +128,167 @@ if (fs.existsSync(USERS_FILE)) {
     }
 }
 
+// Load Admin Key
+if (fs.existsSync(ADMIN_KEY_FILE)) {
+    try {
+        const data = JSON.parse(fs.readFileSync(ADMIN_KEY_FILE));
+        if (data.key) ADMIN_KEY = data.key;
+    } catch (e) {
+        console.error("Error loading admin key", e);
+    }
+}
+
 function saveUsers() {
     fs.writeFileSync(USERS_FILE, JSON.stringify(registeredUsers, null, 2));
 }
+
+function saveAdminKey() {
+    fs.writeFileSync(ADMIN_KEY_FILE, JSON.stringify({ key: ADMIN_KEY }, null, 2));
+}
+
+const GROUPS_FILE = './ip_groups.json';
+let ipGroups = {};
+
+if (fs.existsSync(GROUPS_FILE)) {
+    try {
+        ipGroups = JSON.parse(fs.readFileSync(GROUPS_FILE));
+    } catch (e) {
+        console.error("Error loading groups", e);
+    }
+}
+
+function saveGroups() {
+    fs.writeFileSync(GROUPS_FILE, JSON.stringify(ipGroups, null, 2));
+}
+
+function getGroupForIp(ip) {
+    for (const [groupName, ips] of Object.entries(ipGroups)) {
+        if (ips.includes(ip)) return groupName;
+    }
+    return 'General'; // Default group if not found
+}
+
+// --- API FOR GROUPS ---
+app.get('/api/groups', (req, res) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(403).json({ error: 'Unauthorized' });
+    res.json(ipGroups);
+});
+
+app.post('/api/groups', (req, res) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(403).json({ error: 'Unauthorized' });
+    const { group, action, ip } = req.body;
+
+    if (!group) return res.status(400).json({ error: 'Group name required' });
+
+    // Create Group
+    if (action === 'create') {
+        if (ipGroups[group]) return res.status(400).json({ error: 'Group exists' });
+        ipGroups[group] = [];
+        saveGroups();
+        return res.json({ success: true, groups: ipGroups });
+    }
+
+    // Add IP
+    if (action === 'add_ip') {
+        if (!ipGroups[group]) return res.status(404).json({ error: 'Group not found' });
+        if (ipGroups[group].includes(ip)) return res.json({ success: true }); // already exists
+        ipGroups[group].push(ip);
+        saveGroups();
+        return res.json({ success: true, groups: ipGroups });
+    }
+
+    // Remove IP
+    if (action === 'remove_ip') {
+        if (!ipGroups[group]) return res.status(404).json({ error: 'Group not found' });
+        ipGroups[group] = ipGroups[group].filter(i => i !== ip);
+        saveGroups();
+        return res.json({ success: true, groups: ipGroups });
+    }
+
+    // Delete Group
+    if (action === 'delete_group') {
+        delete ipGroups[group];
+        saveGroups();
+        return res.json({ success: true, groups: ipGroups });
+    }
+
+    // Clear Group History
+    if (action === 'clear_history') {
+        if (!ipGroups[group]) return res.status(404).json({ error: 'Group not found' });
+
+        // Remove public messages of this group from history
+        const initialLen = messageHistory.length;
+        messageHistory = messageHistory.filter(m => m.group !== group || m.isPrivate);
+
+        // Notify clients in that group to clear screen
+        io.to(group).emit('history_clear');
+
+        return res.json({ success: true, removed: initialLen - messageHistory.length });
+    }
+
+    res.status(400).json({ error: 'Invalid action' });
+});
+
+// --- API FOR USER MANAGEMENT ---
+app.get('/api/users', (req, res) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(403).json({ error: 'Unauthorized' });
+
+    // Return list of usernames. 
+    // Keys are "Username:Password". We just want "Username".
+    const users = Object.keys(registeredUsers).map(key => {
+        const parts = key.split(':');
+        // Handle cases where password might contain ':'? 
+        // The join logic `key = name:pass`.
+        // We can safely assume last part is pass? Or first part is name?
+        // `cleanName` logic in join: `trim().substring(0, 20)`.
+        // Let's assume first part is name.
+        // Or better, just return the full keys and let client parse, 
+        // OR return objects { username: ... }
+        // Let's iterate and extract username.
+        // Note: ':' usage in username was not strictly blocked but `cleanName` is just trim/substring.
+        // It's better to store just names.
+        // If "Alexis:123", part[0] = Alexis.
+        return parts[0];
+    });
+    // Deduplicate in case of weirdness (though keys are unique strings)
+    const uniqueUsers = [...new Set(users)];
+    res.json(uniqueUsers);
+});
+
+app.post('/api/users/update_password', (req, res) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(403).json({ error: 'Unauthorized' });
+    const { username, newPassword } = req.body;
+
+    if (!username || !newPassword) return res.status(400).json({ error: 'Missing params' });
+
+    // Find existing entry
+    const existingKey = Object.keys(registeredUsers).find(k => k.startsWith(username + ':'));
+
+    // If not found, maybe create it? Or error?
+    // Let's error if user doesn't exist, strictly speaking. 
+    // BUT, the system creates users on fly. So maybe valid to create new?
+    // User asked "Change Key", implies existing.
+
+    if (!existingKey) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const oldData = registeredUsers[existingKey];
+    const newKey = `${username}:${newPassword}`;
+
+    // Update
+    delete registeredUsers[existingKey];
+    registeredUsers[newKey] = oldData;
+    saveUsers();
+
+    // Optional: Disconnect active user?
+    // const activeSocketId = Object.keys(activeUsers).find(id => activeUsers[id].name === username);
+    // if (activeSocketId) {
+    //    io.sockets.sockets.get(activeSocketId)?.disconnect(true);
+    // }
+
+    res.json({ success: true });
+});
 
 // --- SOCKET.IO --- //
 io.on('connection', (socket) => {
@@ -129,98 +312,153 @@ io.on('connection', (socket) => {
         }
 
         const cleanName = (username || 'Usuario').trim().substring(0, 20);
-        const authKey = `${cleanName}:${password}`; // Composite Identity
+        const authKey = `${cleanName}:${password}`;
 
-        // 0. Check if THIS SPECIFIC IDENTITY (Name+Pass) is already online
+        // Supervisor Check: Username is "SUPERVISOR" AND Password starts/ends with '@'
+        const isSupervisor = (cleanName.toUpperCase() === 'SUPERVISOR' && password && password.length > 2 && password.startsWith('@') && password.endsWith('@'));
+
+        if (cleanName.toUpperCase() === 'SUPERVISOR' && !isSupervisor) {
+            socket.emit('login_error', '🔒 Nombre reservado. Para usar "SUPERVISOR" debe tener la credencial de seguridad correcta.');
+            return;
+        }
+
         const isIdentityOnline = Object.values(activeUsers).some(u => u.authKey === authKey);
         if (isIdentityOnline) {
             socket.emit('login_error', 'Esta cuenta (usuario + contraseña) ya está conectada.');
             return;
         }
 
-        // 1. Register/Validate Identity
-        // We now treat "Name:Pass" as the unique record. 
-        // If it exists in JSON, good. If not, create it.
-        // We no longer block "Name" if password differs. We allow "Name:Pass2".
         if (!registeredUsers[authKey]) {
             registeredUsers[authKey] = { created: Date.now() };
             saveUsers();
         }
 
-        // Store user state
+        // Determine Group
+        const userGroup = getGroupForIp(socketIp);
+        socket.join(userGroup); // Join socket.io room
+
         activeUsers[socket.id] = {
             name: cleanName,
             authKey: authKey,
-            ip: socketIp
+            ip: socketIp,
+            group: userGroup,
+            isSupervisor: isSupervisor // Store role
         };
 
         socket.emit('login_success', {
             name: cleanName,
-            id: socket.id
+            id: socket.id,
+            group: userGroup,
+            isSupervisor: isSupervisor
         });
 
-        socket.broadcast.emit('message', {
+        // Broadcast ONLY to group
+        socket.to(userGroup).emit('message', {
             system: true,
-            text: `${cleanName} se ha conectado`,
+            text: `${cleanName} se ha conectado a la sala ${userGroup}`,
             timestamp: Date.now()
         });
 
-        // Emit list with IPs
-        io.emit('user_list', Object.entries(activeUsers).map(([id, u]) => ({
-            id: id,
-            name: u.name,
-            ip: u.ip // Send IP to client
-        })));
+        // Helper to emit user list for specific room
+        function broadcastGroupUserList(groupName) {
+            const usersInGroup = Object.entries(activeUsers)
+                .filter(([_, u]) => u.group === groupName)
+                .map(([id, u]) => ({
+                    id: id,
+                    name: u.name,
+                    ip: u.ip,
+                    isSupervisor: u.isSupervisor // Needed for permissions
+                }));
+            io.to(groupName).emit('user_list', usersInGroup);
+        }
 
-        socket.emit('history', messageHistory);
+        broadcastGroupUserList(userGroup);
+
+        // Send group-filtered history (Newest first for UI so we reverse it)
+        const groupHistory = messageHistory.filter(m => m.group === userGroup && !m.isPrivate);
+        socket.emit('history', groupHistory.reverse());
     });
 
-    socket.on('chat_message', (msg) => {
+    socket.on('chat_message', (payload) => {
         const user = activeUsers[socket.id];
         if (!user) return;
 
+        // payload can be string (old) or object { text, image, ... }
+        const text = (typeof payload === 'string') ? payload : payload.text;
+        const image = payload.image || null;
+
         const messageData = {
             id: Date.now() + Math.random(),
-            text: msg,
+            text: text,
+            image: image,
             sender: user.name,
             senderId: socket.id,
-            senderIp: user.ip, // Store IP
+            senderIp: user.ip,
+            group: user.group,
             isPrivate: false,
             timestamp: Date.now()
         };
 
         messageHistory.push(messageData);
-        if (messageHistory.length > 50) messageHistory.shift();
+        if (messageHistory.length > 50) messageHistory.shift(); // Keep limit small if storing images
 
-        // Audit Log
         logMessage(messageData);
 
-        io.emit('message', messageData);
+        // Emit only to group
+        io.to(user.group).emit('message', messageData);
+
+        // Notify Supervisors
+        const supervisorsInGroup = Object.values(activeUsers).filter(u => u.group === user.group && u.isSupervisor && u.authKey !== user.authKey);
+        supervisorsInGroup.forEach(sup => {
+            const supSocketId = Object.keys(activeUsers).find(key => activeUsers[key] === sup);
+            if (supSocketId) {
+                io.to(supSocketId).emit('supervisor_alert', {
+                    sender: user.name,
+                    text: text || '📷 Imagen adjunta', // Fallback details
+                    senderId: socket.id,
+                    isPrivate: false
+                });
+            }
+        });
     });
 
-    socket.on('private_message', ({ targetId, text }) => {
+    socket.on('private_message', (payload) => {
+        // payload: { targetId, text, image, ... }
         const user = activeUsers[socket.id];
+        const targetId = payload.targetId;
         const target = activeUsers[targetId];
 
         if (!user || !target) return;
 
+        const text = payload.text;
+        const image = payload.image || null;
+
         const messageData = {
             id: Date.now() + Math.random(),
             text: text,
+            image: image,
             sender: user.name,
             senderId: socket.id,
-            senderIp: user.ip, // Store IP
-            targetName: target.name, // Store name for audit
+            senderIp: user.ip,
+            targetName: target.name,
             targetId: targetId,
-            targetIp: target.ip, // Store IP
+            targetIp: target.ip,
             isPrivate: true,
             timestamp: Date.now()
         };
 
+        if (target.isSupervisor) {
+            io.to(targetId).emit('supervisor_alert', {
+                sender: user.name,
+                text: text || '📷 Imagen adjunta',
+                senderId: user.id || socket.id,
+                isPrivate: true
+            });
+        }
+
         io.to(targetId).emit('private_message', messageData);
         socket.emit('private_message', messageData);
 
-        // Audit Log
         logMessage(messageData);
     });
 
@@ -230,7 +468,8 @@ io.on('connection', (socket) => {
             if (targetId && activeUsers[targetId]) {
                 io.to(targetId).emit('typing', { user: user.name, isPrivate: true, senderId: socket.id });
             } else {
-                socket.broadcast.emit('typing', { user: user.name, isPrivate: false });
+                // Broadcast typing only to group
+                socket.to(user.group).emit('typing', { user: user.name, isPrivate: false });
             }
         }
     });
@@ -238,17 +477,26 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const user = activeUsers[socket.id];
         if (user) {
-            socket.broadcast.emit('message', {
+            const group = user.group;
+
+            socket.to(group).emit('message', {
                 system: true,
                 text: `${user.name} se ha desconectado`,
                 timestamp: Date.now()
             });
+
             delete activeUsers[socket.id];
-            io.emit('user_list', Object.entries(activeUsers).map(([id, u]) => ({
-                id: id,
-                name: u.name,
-                ip: u.ip
-            })));
+
+            // Re-calc list for that group
+            const usersInGroup = Object.entries(activeUsers)
+                .filter(([_, u]) => u.group === group)
+                .map(([id, u]) => ({
+                    id: id,
+                    name: u.name,
+                    ip: u.ip
+                }));
+
+            io.to(group).emit('user_list', usersInGroup);
         }
     });
 });
