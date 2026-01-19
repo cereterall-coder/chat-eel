@@ -252,6 +252,34 @@
                 </div>
             </div>
 
+            <!-- Pinned Message Banner -->
+            <div id="pinned-message-banner"
+                class="hidden bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center justify-between z-10 sticky top-0 shadow-sm transition-all duration-300">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div class="bg-yellow-100 p-1.5 rounded-full text-yellow-600 shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform rotate-45" viewBox="0 0 20 20"
+                            fill="currentColor">
+                            <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
+                        </svg>
+                    </div>
+                    <div class="flex flex-col min-w-0 pointer-events-none">
+                        <span class="text-[10px] text-yellow-700 font-bold uppercase tracking-wider">Mensaje
+                            Anclado</span>
+                        <span id="pinned-msg-text"
+                            class="text-sm text-gray-800 truncate leading-tight font-medium">...</span>
+                    </div>
+                </div>
+                <button id="unpin-btn" onclick="unpinMessage()"
+                    class="text-gray-400 hover:text-red-500 transition hidden rounded-full p-1 hover:bg-yellow-100"
+                    title="Desanclar">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
             <!-- Messages Container -->
             <div id="messages" class="flex-1 overflow-y-auto p-4 md:p-10 space-y-3 z-10 scroll-smooth">
                 <!-- Messages Populated by JS -->
@@ -696,6 +724,48 @@
             showToast('Desconectado del servidor', true);
         });
 
+        // --- Pinned Message Logic ---
+        socket.on('pinned_message_update', (msg) => {
+            const banner = document.getElementById('pinned-message-banner');
+            const textEl = document.getElementById('pinned-msg-text');
+            const unpinBtn = document.getElementById('unpin-btn');
+
+            if (msg) {
+                const text = msg.text || (msg.image ? '📷 Imagen' : 'Mensaje');
+                textEl.textContent = text;
+                banner.classList.remove('hidden');
+
+                // Show Unpin button only if supervisor
+                if (iAmSupervisor) {
+                    unpinBtn.classList.remove('hidden');
+                } else {
+                    unpinBtn.classList.add('hidden');
+                }
+            } else {
+                banner.classList.add('hidden');
+            }
+        });
+
+        function requestPin(msgId) {
+            // Find message in current chat history
+            // Since pinning is usually for General, look in General first or active
+            const msg = chats['general'].messages.find(m => m.id == msgId) || chats[activeChat].messages.find(m => m.id == msgId);
+
+            if (msg) {
+                if (confirm('¿Anclar este mensaje para todos?')) {
+                    socket.emit('pin_message', msg);
+                }
+            } else {
+                showToast('Error: No se encuentra el mensaje', true);
+            }
+        }
+
+        function unpinMessage() {
+            if (confirm('¿Desanclar mensaje?')) {
+                socket.emit('unpin_message');
+            }
+        }
+
         // Helper to check permissions
         let iAmSupervisor = false;
 
@@ -830,7 +900,15 @@
 
                     <div class="absolute bottom-1 right-2 text-[10px] text-gray-500 leading-none select-none flex items-center gap-1">
                        <span>${time}</span>
-                       ${isMe ? '<span class="text-blue-500">✓✓</span>' : ''} 
+                       ${isMe ? '<span class="text-blue-500">✓✓</span>' : ''}
+                       
+                       ${(iAmSupervisor && activeChat === 'general') ?
+                    `<button onclick="requestPin('${msg.id}')" class="ml-2 text-gray-400 hover:text-yellow-600 transition opacity-0 group-hover:opacity-100" title="Anclar mensaje">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                                </svg>
+                            </button>`
+                    : ''}
                     </div>
                 </div>
             `;

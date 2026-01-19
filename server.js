@@ -167,6 +167,21 @@ function saveGroups() {
     fs.writeFileSync(GROUPS_FILE, JSON.stringify(ipGroups, null, 2));
 }
 
+const PINNED_FILE = './pinned_messages.json';
+let pinnedMessages = {}; // { groupName: { messageData } }
+
+if (fs.existsSync(PINNED_FILE)) {
+    try {
+        pinnedMessages = JSON.parse(fs.readFileSync(PINNED_FILE));
+    } catch (e) {
+        console.error("Error loading pinned messages", e);
+    }
+}
+
+function savePinnedMessages() {
+    fs.writeFileSync(PINNED_FILE, JSON.stringify(pinnedMessages, null, 2));
+}
+
 function isIpInRange(ip, rangeStr) {
     const parts = rangeStr.split('-');
     if (parts.length !== 2) return false;
@@ -477,6 +492,11 @@ io.on('connection', (socket) => {
         const groupHistory = messageHistory.filter(m => m.group === userGroup && !m.isPrivate);
         socket.emit('history', groupHistory.reverse());
 
+        // Send Pinned Message
+        if (pinnedMessages[userGroup]) {
+            socket.emit('pinned_message_update', pinnedMessages[userGroup]);
+        }
+
         broadcastMonitorUpdate(); // Notify monitors
     });
 
@@ -597,6 +617,40 @@ io.on('connection', (socket) => {
                 // Broadcast typing only to group
                 socket.to(user.group).emit('typing', { user: user.name, isPrivate: false });
             }
+        }
+    });
+
+    socket.on('pin_message', (msgData) => {
+        const user = activeUsers[socket.id];
+        // Only Supervisor can pin
+        if (!user || user.group === 'EEL' && !user.isSupervisor) {
+            // Let's assume only Supervisors can pin generally, or maybe check group logic?
+            // User just said "enable option", but usually this is an admin feature.
+            // Given the context of restrictions in EEL, I'll stick to Supervisor-only for safety 
+            // OR allow anyone in non-restricted groups? 
+            // Let's enforce Supervisor check for now as safer default, or at least for EEL.
+            // "monitor_auth" users are supervisors.
+            if (!user.isSupervisor) return;
+        }
+
+        // Save Pinned Message for the group
+        pinnedMessages[user.group] = msgData;
+        savePinnedMessages();
+
+        // Broadcast to Group
+        io.to(user.group).emit('pinned_message_update', msgData);
+
+        // Broadcast to Supervisors of that group? Done via group emit.
+    });
+
+    socket.on('unpin_message', () => {
+        const user = activeUsers[socket.id];
+        if (!user || !user.isSupervisor) return;
+
+        if (pinnedMessages[user.group]) {
+            delete pinnedMessages[user.group];
+            savePinnedMessages();
+            io.to(user.group).emit('pinned_message_update', null);
         }
     });
 
