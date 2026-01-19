@@ -46,8 +46,7 @@
         <button onclick="switchTab('config')" id="tab-config"
             class="px-4 py-2 bg-gray-200 rounded-t-lg font-bold text-gray-600 hover:bg-white transition">Config.
             Red</button>
-        <button onclick="switchTab('users')" id="tab-users"
-            class="px-4 py-2 bg-gray-200 rounded-t-lg font-bold text-gray-600 hover:bg-white transition">Usuarios</button>
+
         <button onclick="switchTab('admin')" id="tab-admin"
             class="px-4 py-2 bg-gray-200 rounded-t-lg font-bold text-gray-600 hover:bg-white transition">Admin</button>
     </div>
@@ -65,6 +64,12 @@
 
         <!-- Filters -->
         <div class="bg-gray-50 p-4 rounded-lg shadow-sm mb-6 flex gap-4 items-center">
+            <div class="w-48">
+                <select id="filter-group" onchange="renderLogs()"
+                    class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500 bg-white text-gray-700 font-bold">
+                    <option value="">🏢 Todas las Salas</option>
+                </select>
+            </div>
             <div class="flex-1">
                 <input type="text" id="filter-user" onkeyup="renderLogs()"
                     class="w-full border p-2 rounded text-sm focus:outline-none focus:border-blue-500"
@@ -203,61 +208,7 @@
                 </div>
             </div>
 
-            <!-- Main Dashboard: Users -->
-            <div id="dashboard-users" class="hidden container mx-auto p-6 bg-white rounded-b-lg shadow-sm min-h-[80vh]">
-                <header class="flex justify-between items-center mb-8 border-b pb-4">
-                    <div>
-                        <h1 class="text-3xl font-logo tracking-wide text-gray-800">Chat-ELL <span
-                                class="text-purple-600">USUARIOS</span></h1>
-                        <p class="text-sm text-gray-500">Gestión de Credenciales</p>
-                    </div>
-                    <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500 underline">Cerrar
-                        Sesión</button>
-                </header>
 
-                <div class="flex gap-8">
-                    <!-- User List -->
-                    <div class="w-1/3 border-r pr-6">
-                        <h3 class="font-bold text-gray-700 mb-4">Usuarios Registrados</h3>
-                        <div class="mb-4">
-                            <button onclick="fetchUsers()" class="text-xs bg-gray-100 p-1 rounded hover:bg-gray-200">🔄
-                                Actualizar Lista</button>
-                        </div>
-                        <div id="users-list" class="space-y-2 mb-6 max-h-[60vh] overflow-y-auto">
-                            <!-- Check JS -->
-                        </div>
-                    </div>
-
-                    <!-- Password Change Form -->
-                    <div class="w-2/3 pl-2">
-                        <div id="user-details-placeholder" class="text-center text-gray-400 mt-20">
-                            <p>Selecciona un usuario para gestionar</p>
-                        </div>
-
-                        <div id="user-details" class="hidden">
-                            <h2 class="text-2xl font-bold text-gray-800 mb-6">Gestionar: <span id="selected-username"
-                                    class="text-purple-600"></span></h2>
-
-                            <div class="bg-purple-50 p-6 rounded-lg border border-purple-100 max-w-md">
-                                <h4 class="font-bold text-gray-700 mb-4">Cambiar Contraseña</h4>
-                                <div class="space-y-4">
-                                    <div>
-                                        <label class="block text-xs font-bold text-gray-500 mb-1">Nueva
-                                            Contraseña</label>
-                                        <input type="text" id="new-password"
-                                            class="w-full border p-2 rounded focus:outline-none focus:border-purple-500"
-                                            placeholder="Escribe la nueva clave">
-                                    </div>
-                                    <button onclick="updatePassword()"
-                                        class="w-full bg-purple-600 text-white py-2 rounded font-bold hover:bg-purple-700 transition">
-                                        ACTUALIZAR CLAVE
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -311,7 +262,7 @@
         let allLogs = [];
         let ipGroups = {};
         let currentGroup = null;
-        let currentUser = null; // For user management
+
 
         async function authenticate() {
             const input = document.getElementById('admin-key').value;
@@ -341,14 +292,14 @@
             // Hide all
             document.getElementById('dashboard-audit').classList.add('hidden');
             document.getElementById('dashboard-config').classList.add('hidden');
-            document.getElementById('dashboard-users').classList.add('hidden');
+
             document.getElementById('dashboard-admin').classList.add('hidden');
 
             // Reset Tabs
             const inactiveClass = "px-4 py-2 bg-gray-200 rounded-t-lg font-bold text-gray-600 hover:bg-white transition cursor-pointer";
             document.getElementById('tab-audit').className = inactiveClass;
             document.getElementById('tab-config').className = inactiveClass;
-            document.getElementById('tab-users').className = inactiveClass;
+
             document.getElementById('tab-admin').className = inactiveClass;
 
             if (tab === 'audit') {
@@ -359,10 +310,7 @@
                 document.getElementById('dashboard-config').classList.remove('hidden');
                 document.getElementById('tab-config').className = "px-4 py-2 bg-white rounded-t-lg font-bold text-blue-700 border-b-2 border-blue-500 cursor-default";
                 fetchGroups();
-            } else if (tab === 'users') {
-                document.getElementById('dashboard-users').classList.remove('hidden');
-                document.getElementById('tab-users').className = "px-4 py-2 bg-white rounded-t-lg font-bold text-purple-700 border-b-2 border-purple-500 cursor-default";
-                fetchUsers();
+
             } else if (tab === 'admin') {
                 document.getElementById('dashboard-admin').classList.remove('hidden');
                 document.getElementById('tab-admin').className = "px-4 py-2 bg-white rounded-t-lg font-bold text-gray-800 border-b-2 border-gray-600 cursor-default";
@@ -381,6 +329,7 @@
                     // Sort by newest first
                     allLogs.sort((a, b) => b.timestamp - a.timestamp);
 
+                    populateGroupFilter();
                     renderLogs();
                 } else {
                     alert("Error de autorización con el servidor.");
@@ -395,10 +344,13 @@
             const tbody = document.getElementById('logs-body');
             const searchUser = document.getElementById('filter-user').value.toLowerCase();
             const searchContent = document.getElementById('filter-content').value.toLowerCase();
+            const searchGroup = document.getElementById('filter-group').value;
 
             tbody.innerHTML = '';
 
             const filtered = allLogs.filter(log => {
+                // Filter by Group
+                if (searchGroup && log.group !== searchGroup) return false;
                 // If log user, check sender, senderId, or targetId (if private)
                 const senderMatch = (log.sender || '').toLowerCase().includes(searchUser);
                 // For target, simplistic check. Real system would map IDs to names, but here we just have IDs mostly
@@ -445,6 +397,26 @@
                 `;
                 tbody.appendChild(tr);
             });
+        }
+
+        function populateGroupFilter() {
+            // Extract unique groups from logs
+            const groups = [...new Set(allLogs.map(l => l.group).filter(Boolean))].sort();
+
+            const select = document.getElementById('filter-group');
+            const current = select.value;
+
+            select.innerHTML = '<option value="">🏢 Todas las Salas</option>';
+
+            groups.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.innerText = `📂 ${g}`;
+                select.appendChild(opt);
+            });
+
+            // Restore selection if still valid
+            if (groups.includes(current)) select.value = current;
         }
 
         async function deleteLogs() {
@@ -509,6 +481,47 @@
             } catch (e) { console.error(e); }
         }
 
+        function countTotalIps(entries) {
+            let count = 0;
+            entries.forEach(e => {
+                if (e.includes('-')) {
+                    // Range logic
+                    const parts = e.split('-');
+                    const start = parts[0];
+                    let end = parts[1];
+
+                    // Handle suffix range (e.g. 1.1.1.1-50)
+                    if (!end.includes('.')) {
+                        const sParts = start.split('.');
+                        const startLast = parseInt(sParts[3]);
+                        const endLast = parseInt(end);
+                        count += (endLast - startLast) + 1;
+                    } else {
+                        // Full IP range (Approximate for flat networks)
+                        // If different subnets, this is complex vs simple display.
+                        // Assuming last octet range usually for local setup.
+                        const sParts = start.split('.').map(Number);
+                        const eParts = end.split('.').map(Number);
+
+                        // Simple check: if first 3 octets match, diff last octet
+                        if (sParts[0] === eParts[0] && sParts[1] === eParts[1] && sParts[2] === eParts[2]) {
+                            count += (eParts[3] - sParts[3]) + 1;
+                        } else {
+                            // Complex range, just count as "Many" or fallback 1 per entry if unsure?
+                            // Let's assume it counts as at least 1, but we can try basic math diff?
+                            // Just count as 2 for simplicity or keep 1? 
+                            // Actually properly calculating IP difference:
+                            const toLong = (ip) => ip.split('.').reduce((acc, oct) => (acc << 8) + +oct, 0) >>> 0;
+                            count += (toLong(end) - toLong(start)) + 1;
+                        }
+                    }
+                } else {
+                    count++;
+                }
+            });
+            return count;
+        }
+
         function renderGroupsList() {
             const container = document.getElementById('groups-list');
             container.innerHTML = '';
@@ -517,9 +530,10 @@
                 const div = document.createElement('div');
                 div.className = `p-3 rounded-lg cursor-pointer flex justify-between items-center ${currentGroup === group ? 'bg-blue-50 border-blue-200 border text-blue-700' : 'bg-white border hover:bg-gray-50'}`;
                 div.onclick = () => { currentGroup = group; renderGroupsList(); renderGroupDetails(group); };
+                const totalIps = countTotalIps(ipGroups[group]);
                 div.innerHTML = `
                     <span class="font-bold text-sm">${group}</span>
-                    <span class="bg-gray-200 text-gray-600 text-xs px-2 py-0.5 rounded-full">${ipGroups[group].length} IPs</span>
+                    <span class="bg-gray-200 text-gray-600 text-xs px-2 py-0.5 rounded-full">${totalIps} IPs</span>
                 `;
                 container.appendChild(div);
             });
@@ -573,7 +587,7 @@
             const ip = document.getElementById('new-ip-input').value.trim();
             if (!ip) return;
             // Validate IP format simply
-            if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) return alert("Formato de IP inválido");
+            if (!/^(\d{1,3}\.){3}\d{1,3}(-\d{1,3}(\.\d{1,3}){0,3})?$/.test(ip)) return alert("Formato: IP única (1.1.1.1) o Rango (1.1.1.1-50)");
 
             await apiGroupAction({ action: 'add_ip', group: currentGroup, ip: ip });
             document.getElementById('new-ip-input').value = '';
@@ -586,66 +600,8 @@
             fetchGroups();
         }
 
-        // --- USER LOGIC ---
-        async function fetchUsers() {
-            try {
-                const res = await fetch('/api/users', { headers: { 'x-admin-key': adminKey } });
-                if (res.ok) {
-                    const users = await res.json();
-                    renderUsers(users);
-                }
-            } catch (e) { console.error(e); }
-        }
 
-        function renderUsers(users) {
-            const container = document.getElementById('users-list');
-            container.innerHTML = '';
 
-            // Filter out system reserved words if any, though "Supervisor" is a role, it has a login.
-            users.sort((a, b) => a.localeCompare(b));
-
-            users.forEach(user => {
-                const div = document.createElement('div');
-                div.className = `p-3 rounded-lg cursor-pointer flex justify-between items-center ${currentUser === user ? 'bg-purple-50 border-purple-200 border text-purple-700' : 'bg-white border hover:bg-gray-50'}`;
-                div.onclick = () => {
-                    currentUser = user;
-                    renderUsers(users); // Re-render to highlight
-                    document.getElementById('user-details').classList.remove('hidden');
-                    document.getElementById('user-details-placeholder').classList.add('hidden');
-                    document.getElementById('selected-username').textContent = user;
-                    document.getElementById('new-password').value = '';
-                };
-                div.innerHTML = `
-                    <span class="font-bold text-sm">${user}</span>
-                    <span class="text-xs text-gray-400">Editar ></span>
-                `;
-                container.appendChild(div);
-            });
-        }
-
-        async function updatePassword() {
-            const newPass = document.getElementById('new-password').value.trim();
-            if (!newPass) return alert("Ingrese una contraseña");
-
-            if (!confirm(`¿Cambiar la contraseña para el usuario "${currentUser}"?`)) return;
-
-            try {
-                const res = await fetch('/api/users/update_password', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-                    body: JSON.stringify({ username: currentUser, newPassword: newPass })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    alert('✅ Contraseña actualizada correctamente.');
-                    document.getElementById('new-password').value = '';
-                } else {
-                    alert('Error: ' + (data.error || 'Desconocido'));
-                }
-            } catch (e) {
-                alert('Error de conexión');
-            }
-        }
 
         async function updateAdminKey() {
             const newKey = document.getElementById('new-admin-key').value;
@@ -679,7 +635,7 @@
             try {
                 const res = await fetch('/api/groups', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-admin-key': CORRECT_KEY },
+                    headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
                     body: JSON.stringify(body)
                 });
                 const data = await res.json();

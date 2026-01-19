@@ -91,5 +91,26 @@
   },
   "4:4": {
     "created": 1768694121800
+  },
+  "TestUser:123456": {
+    "created": 1768751889216
+  },
+  "User1:password123": {
+    "created": 1768753010605
+  },
+  "User1:User1": {
+    "created": 1768753795120
+  },
+  "UsuarioTest1:password123": {
+    "created": 1768754788357
+  },
+  "1:2": {
+    "created": 1768761223877
+  },
+  "1:5": {
+    "created": 1768761249185
+  },
+  "SUPERVISOR:@SGSGSG@": {
+    "created": 1768761597366
   }
 }

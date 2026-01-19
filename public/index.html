@@ -236,6 +236,8 @@
                     <div class="text-right hidden md:block">
                         <div class="text-[10px] text-gray-500 uppercase tracking-wider">Conectado como</div>
                         <div id="my-name-display" class="font-bold text-green-800 text-sm font-elegant">Usuario</div>
+                        <div id="my-group-display" class="text-[10px] text-gray-600 font-medium leading-none mt-0.5">
+                            Grupo: ...</div>
                     </div>
                     <div class="h-8 w-px bg-gray-300 mx-1"></div>
                     <button onclick="logout()"
@@ -494,7 +496,20 @@
             const searchTerm = (document.getElementById('search-users')?.value || '').toLowerCase();
 
             // Filter out myself
-            let users = lastUsers.filter(u => u.id !== socket.id);
+            let users = [...lastUsers].filter(u => u.id !== socket.id);
+
+            // Add chats that are not in the online user list (e.g. Hidden Support, Disconnected Users)
+            Object.keys(chats).forEach(chatId => {
+                if (chatId !== 'general' && !users.find(u => u.id === chatId)) {
+                    // Create a fake user object for the UI
+                    users.push({
+                        id: chatId,
+                        name: chats[chatId].name,
+                        ip: 'Privado/Desconectado',
+                        isVirtual: true // Marker
+                    });
+                }
+            });
 
             // 1. Text Search Filtering
             if (searchTerm) {
@@ -632,6 +647,12 @@
             }
 
             handleIncomingMessage(partnerId, msg);
+
+            // SPECIAL ALERT: If sender is "Soporte", trigger super alert/sound
+            if (msg.sender === 'Soporte') {
+                showSuperAlert(msg.sender, msg.text, msg.senderId, true);
+                if (window.alertSound) alertSound.play().catch(() => { });
+            }
         });
 
         function handleIncomingMessage(chatId, msg) {
@@ -686,6 +707,9 @@
             chats = { 'general': { name: 'Sala General', messages: [], unread: 0 } };
 
             document.getElementById('my-name-display').textContent = myUsername;
+            if (document.getElementById('my-group-display')) {
+                document.getElementById('my-group-display').textContent = `Grupo: ${data.group || 'General'}`;
+            }
             if (iAmSupervisor) {
                 document.getElementById('my-name-display').innerHTML += ' <span class="text-xs text-yellow-600 font-bold">★ SUPERVISOR</span>';
             }

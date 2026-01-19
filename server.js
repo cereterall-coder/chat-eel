@@ -113,11 +113,17 @@ app.post('/api/audit/delete', (req, res) => {
 const fs = require('fs');
 const USERS_FILE = './users.json';
 const ADMIN_KEY_FILE = './admin_key.json';
+const LOG_FILE = './chat_logs.json';
 
 let activeUsers = {}; // { socketId: { name: "User" } }
 let registeredUsers = {}; // { "User": "password" }
 let messageHistory = [];
-let ADMIN_KEY = 'Alexis2026'; // Default
+let ADMIN_KEY = '02855470'; // Default
+
+// --- AUTO CLEANUP STATE ---
+let activeDate = new Date().toLocaleDateString();
+let lastScheduledTrigger = ''; // To avoid multiple clears within the same minute
+// --------------------------
 
 // Load users
 if (fs.existsSync(USERS_FILE)) {
@@ -161,9 +167,38 @@ function saveGroups() {
     fs.writeFileSync(GROUPS_FILE, JSON.stringify(ipGroups, null, 2));
 }
 
+function isIpInRange(ip, rangeStr) {
+    const parts = rangeStr.split('-');
+    if (parts.length !== 2) return false;
+
+    const startIp = parts[0].trim();
+    let endIp = parts[1].trim();
+
+    // Check if endIp is just a suffix (e.g. "10-50")
+    if (!endIp.includes('.')) {
+        const startParts = startIp.split('.');
+        if (startParts.length !== 4) return false;
+        endIp = `${startParts[0]}.${startParts[1]}.${startParts[2]}.${endIp}`;
+    }
+
+    // Convert IPs to numbers for comparison
+    const ipToLong = (ipAddr) => {
+        return ipAddr.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+    };
+
+    const ipNum = ipToLong(ip);
+    const startNum = ipToLong(startIp);
+    const endNum = ipToLong(endIp);
+
+    return ipNum >= startNum && ipNum <= endNum;
+}
+
 function getGroupForIp(ip) {
-    for (const [groupName, ips] of Object.entries(ipGroups)) {
-        if (ips.includes(ip)) return groupName;
+    for (const [groupName, entries] of Object.entries(ipGroups)) {
+        for (const entry of entries) {
+            if (entry === ip) return groupName;
+            if (entry.includes('-') && isIpInRange(ip, entry)) return groupName;
+        }
     }
     return 'General'; // Default group if not found
 }
@@ -301,6 +336,59 @@ io.on('connection', (socket) => {
         return;
     }
 
+    // --- MONITOR AUTH ---
+    socket.on('monitor_auth', (key) => {
+        if (key === ADMIN_KEY) {
+            // Register as hidden user
+            activeUsers[socket.id] = {
+                name: 'Soporte',
+                authKey: 'monitor-key',
+                ip: socketIp,
+                group: 'MONITOR',
+                hidden: true,
+                isSupervisor: true
+            };
+            socket.join('monitors');
+            socket.emit('monitor_auth_result', { success: true });
+
+            // Send immediate state
+            socket.emit('monitor_update', activeUsers);
+        } else {
+            socket.emit('monitor_auth_result', { success: false, error: 'Clave incorrecta' });
+        }
+    });
+
+    // Helper to notify monitors
+    function broadcastMonitorUpdate() {
+        io.to('monitors').emit('monitor_update', activeUsers);
+    }
+
+    socket.on('monitor_message', (payload) => {
+        // Wrapper for sending private messages as monitor
+        const user = activeUsers[socket.id];
+        if (!user || user.name !== 'Soporte') return;
+
+        const targetId = payload.targetId;
+        const target = activeUsers[targetId];
+
+        if (!target) return;
+
+        const messageData = {
+            id: Date.now() + Math.random(),
+            text: payload.text,
+            sender: user.name,
+            senderId: socket.id,
+            targetName: target.name,
+            targetId: targetId,
+            isPrivate: true,
+            timestamp: Date.now()
+        };
+
+        io.to(targetId).emit('private_message', messageData);
+        // No need to echo back to socket, client handles it
+        logMessage(messageData);
+    });
+
     socket.on('join', (data) => {
         let username, password;
         if (typeof data === 'string') {
@@ -310,6 +398,15 @@ io.on('connection', (socket) => {
             username = data.username;
             password = data.password;
         }
+
+        // --- NEW DAY CHECK ---
+        const today = new Date().toLocaleDateString();
+        if (today !== activeDate) {
+            activeDate = today;
+            console.log(`[New Day] Primer ingreso del día detected (${today}). Limpiando EEL...`);
+            clearGroupHistory('EEL'); // Reset EEL on first login of the day
+        }
+        // ---------------------
 
         const cleanName = (username || 'Usuario').trim().substring(0, 20);
         const authKey = `${cleanName}:${password}`;
@@ -362,7 +459,7 @@ io.on('connection', (socket) => {
         // Helper to emit user list for specific room
         function broadcastGroupUserList(groupName) {
             const usersInGroup = Object.entries(activeUsers)
-                .filter(([_, u]) => u.group === groupName)
+                .filter(([_, u]) => u.group === groupName && !u.hidden) // Filter hidden monitors
                 .map(([id, u]) => ({
                     id: id,
                     name: u.name,
@@ -372,11 +469,15 @@ io.on('connection', (socket) => {
             io.to(groupName).emit('user_list', usersInGroup);
         }
 
+
+
         broadcastGroupUserList(userGroup);
 
         // Send group-filtered history (Newest first for UI so we reverse it)
         const groupHistory = messageHistory.filter(m => m.group === userGroup && !m.isPrivate);
         socket.emit('history', groupHistory.reverse());
+
+        broadcastMonitorUpdate(); // Notify monitors
     });
 
     socket.on('chat_message', (payload) => {
@@ -386,6 +487,17 @@ io.on('connection', (socket) => {
         // payload can be string (old) or object { text, image, ... }
         const text = (typeof payload === 'string') ? payload : payload.text;
         const image = payload.image || null;
+
+        // RESTRICTION: Block images for EEL group
+        // RESTRICTION: In EEL, only Supervisor can broadcast images
+        if (image && user.group === 'EEL' && !user.isSupervisor) {
+            socket.emit('message', {
+                system: true,
+                text: '🚫 Solo el SUPERVISOR puede enviar imágenes a este grupo.',
+                timestamp: Date.now()
+            });
+            return;
+        }
 
         const messageData = {
             id: Date.now() + Math.random(),
@@ -432,6 +544,20 @@ io.on('connection', (socket) => {
 
         const text = payload.text;
         const image = payload.image || null;
+
+        // RESTRICTION: Block images for EEL group in private too
+        // RESTRICTION: In EEL, users can only send images to SUPERVISOR
+        // Supervisors can send to anyone.
+        if (image && user.group === 'EEL' && !user.isSupervisor) {
+            if (!target.isSupervisor) {
+                socket.emit('message', {
+                    system: true,
+                    text: '🚫 Tus imágenes solo pueden enviarse al SUPERVISOR.',
+                    timestamp: Date.now()
+                });
+                return;
+            }
+        }
 
         const messageData = {
             id: Date.now() + Math.random(),
@@ -497,11 +623,12 @@ io.on('connection', (socket) => {
                 }));
 
             io.to(group).emit('user_list', usersInGroup);
+            broadcastMonitorUpdate(); // Notify monitors
         }
     });
 });
 
-const LOG_FILE = './chat_logs.json';
+
 
 // Helper: Append log
 function logMessage(msgData) {
@@ -518,20 +645,42 @@ function logMessage(msgData) {
     fs.writeFileSync(LOG_FILE, JSON.stringify(logs, null, 2));
 }
 
-// --- API FOR AUDIT ---
-app.get('/api/audit', (req, res) => {
-    // Simple mock auth
-    const auth = req.headers['x-admin-key'];
-    if (auth !== 'Alexis2026') { // Hardcoded key for the user
-        return res.status(403).json({ error: 'Unauthorized' });
-    }
 
-    if (fs.existsSync(LOG_FILE)) {
-        res.json(JSON.parse(fs.readFileSync(LOG_FILE)));
-    } else {
-        res.json([]);
+
+
+// --- SCHEDULED CLEANUP LOGIC ---
+function clearGroupHistory(groupName) {
+    // 1. Filter out messages of this group from memory
+    messageHistory = messageHistory.filter(m => m.group !== groupName);
+
+    // 2. Notify active users in that group to wipe their screens
+    // We send an empty history array which client renders as "zero messages"
+    const socketsInGroup = Object.keys(activeUsers).filter(id => activeUsers[id].group === groupName);
+
+    socketsInGroup.forEach(targetId => {
+        io.to(targetId).emit('history', []); // Clear UI
+        io.to(targetId).emit('message', {
+            system: true,
+            text: '🧹 Mantenimiento: El historial ha sido reiniciado automáticamente.',
+            timestamp: Date.now()
+        });
+    });
+
+    console.log(`[Auto-Clean] Historial del grupo ${groupName} eliminado.`);
+}
+
+// Check every minute
+setInterval(() => {
+    const now = new Date();
+    const headers = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+    // Triggers: 14:05 (02:05 PM) and 22:00 (10:00 PM)
+    if ((headers === '14:05' || headers === '22:00') && lastScheduledTrigger !== headers) {
+        lastScheduledTrigger = headers;
+        clearGroupHistory('EEL');
     }
-});
+}, 30000); // Check every 30s
+
 
 const PORT = process.env.PORT || 3005;
 server.listen(PORT, () => {

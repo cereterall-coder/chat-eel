@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat-ELL | Monitor Global</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=League+Gothic&display=swap"
+        rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .font-logo {
+            font-family: 'League Gothic', sans-serif;
+            letter-spacing: 0.05em;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 h-screen overflow-hidden text-gray-100">
+
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="fixed inset-0 bg-gray-900 z-50 flex items-center justify-center">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-2xl w-80 text-center border border-gray-700">
+            <h2 class="text-3xl text-white mb-2 font-logo tracking-wide">MODO MONITOR</h2>
+            <p class="text-gray-400 text-xs mb-6">Acceso Global de Supervisión</p>
+            <input type="password" id="admin-key"
+                class="w-full bg-gray-700 border border-gray-600 text-white p-2 rounded-lg mb-4 focus:outline-none focus:border-blue-500"
+                placeholder="Clave de Administrador">
+            <button onclick="attemptLogin()"
+                class="w-full bg-blue-600 text-white p-2 rounded-lg font-bold hover:bg-blue-700 transition">
+                INICIAR SISTEMA
+            </button>
+            <p id="auth-error" class="text-red-400 text-xs mt-3 hidden">Clave incorrecta</p>
+        </div>
+    </div>
+
+    <!-- Main Interface -->
+    <div id="main-interface" class="hidden flex h-full">
+
+        <!-- Sidebar: Groups -->
+        <div class="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
+            <div class="p-4 border-b border-gray-700">
+                <h1 class="text-2xl font-logo tracking-wide text-white">Chat-ELL <span
+                        class="text-blue-500">MONITOR</span></h1>
+                <div class="flex items-center gap-2 mt-2">
+                    <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <span class="text-xs text-green-400">Sistema en Línea</span>
+                </div>
+            </div>
+
+            <div class="p-3">
+                <h3 class="text-xs font-bold text-gray-500 uppercase mb-2">Salas Activas</h3>
+                <div id="groups-list" class="space-y-1">
+                    <!-- Groups injected here -->
+                </div>
+            </div>
+
+            <div class="mt-auto p-4 border-t border-gray-700">
+                <button onclick="location.reload()"
+                    class="text-xs text-gray-500 hover:text-white flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                        </path>
+                    </svg>
+                    Desconectar
+                </button>
+            </div>
+        </div>
+
+        <!-- Middle: Users in Selected Group -->
+        <div class="w-80 bg-gray-800 border-r border-gray-700 flex flex-col">
+            <div class="p-4 border-b border-gray-700 bg-gray-800">
+                <h2 id="current-group-title" class="text-lg font-bold text-white">Selecciona Sala</h2>
+                <p id="current-group-subtitle" class="text-xs text-gray-400">-- usuarios conectados</p>
+            </div>
+
+            <div id="users-list" class="flex-1 overflow-y-auto p-2 space-y-1">
+                <!-- Users injected here -->
+                <div class="text-center mt-10 text-gray-500 text-sm">
+                    Selecciona un grupo<br>para ver usuarios
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Actions & Chat Preview -->
+        <div class="flex-1 bg-gray-900 flex flex-col relative">
+
+            <!-- Empty State -->
+            <div id="action-placeholder"
+                class="absolute inset-0 flex items-center justify-center text-gray-600 flex-col">
+                <svg class="w-16 h-16 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9">
+                    </path>
+                </svg>
+                <p>Selecciona un usuario para interactuar</p>
+            </div>
+
+            <!-- Interaction View -->
+            <div id="interaction-view" class="hidden flex flex-col h-full">
+                <header class="bg-gray-800 p-4 border-b border-gray-700 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-xl font-bold flex items-center gap-2">
+                            <span id="target-user-name">Usuario</span>
+                            <span class="text-xs bg-blue-900 text-blue-200 px-2 py-0.5 rounded border border-blue-700"
+                                id="target-user-ip">IP</span>
+                        </h2>
+                        <p class="text-xs text-gray-400">Conectado en <span id="target-user-group"
+                                class="text-gray-300 font-medium">...</span></p>
+                    </div>
+                </header>
+
+                <!-- Chat Area (Simulated for Admin) -->
+                <div id="monitor-chat" class="flex-1 overflow-y-auto p-4 space-y-4">
+                    <!-- Messages will appear here -->
+                    <div class="text-center text-xs text-gray-500 my-4">--- Inicio de Supervisión ---</div>
+                </div>
+
+                <!-- Input -->
+                <div class="p-4 bg-gray-800 border-t border-gray-700">
+                    <form onsubmit="sendMessage(event)" class="flex gap-2">
+                        <input type="text" id="msg-input" autocomplete="off"
+                            class="flex-1 bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
+                            placeholder="Escribe un mensaje privado...">
+                        <button type="submit"
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold transition">
+                            ENVIAR
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let adminKey = '';
+        let globalState = {}; // { socketId: { name, group, ip, ... } }
+        let currentGroup = null;
+        let selectedUser = null;
+
+        // --- AUTH ---
+        function attemptLogin() {
+            const key = document.getElementById('admin-key').value;
+            if (!key) return;
+
+            // Emit special auth event
+            socket.emit('monitor_auth', key);
+        }
+
+        socket.on('monitor_auth_result', (result) => {
+            if (result.success) {
+                adminKey = document.getElementById('admin-key').value;
+                document.getElementById('auth-screen').style.display = 'none';
+                document.getElementById('main-interface').classList.remove('hidden');
+                document.getElementById('main-interface').classList.add('flex');
+            } else {
+                const err = document.getElementById('auth-error');
+                err.innerText = result.error || 'Acceso Denegado';
+                err.classList.remove('hidden');
+            }
+        });
+
+        // --- REAL TIME UPDATES ---
+        socket.on('monitor_update', (users) => {
+            // users is the full activeUsers object
+            globalState = users;
+            renderGroupsList();
+            if (currentGroup) {
+                renderUsersList(currentGroup);
+            }
+        });
+
+        socket.on('disconnect', () => {
+            // alert('Conexión perdida con el servidor');
+        });
+
+        // --- RENDERING ---
+        function renderGroupsList() {
+            // Aggregate users by group
+            const groups = {};
+            Object.values(globalState).forEach(u => {
+                if (!groups[u.group]) groups[u.group] = 0;
+                groups[u.group]++;
+            });
+
+            const container = document.getElementById('groups-list');
+            container.innerHTML = '';
+
+            const groupNames = Object.keys(groups).sort();
+
+            if (groupNames.length === 0) {
+                container.innerHTML = '<div class="text-xs text-gray-500 italic p-2">No hay actividad</div>';
+            }
+
+            groupNames.forEach(gName => {
+                const count = groups[gName];
+                const isActive = currentGroup === gName;
+
+                const div = document.createElement('div');
+                div.className = `p-3 rounded cursor-pointer flex justify-between items-center transition ${isActive ? 'bg-blue-900 border border-blue-700' : 'hover:bg-gray-700 bg-gray-800/50'}`;
+                div.onclick = () => selectGroup(gName);
+                div.innerHTML = `
+                    <span class="text-sm font-medium ${isActive ? 'text-white' : 'text-gray-300'}">${gName}</span>
+                    <span class="text-xs bg-gray-900 px-2 py-0.5 rounded-full text-gray-400">${count}</span>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function selectGroup(groupName) {
+            currentGroup = groupName;
+            renderGroupsList(); // To update active state
+
+            document.getElementById('current-group-title').innerText = groupName;
+
+            // Re-calc count
+            const usersInGroup = Object.values(globalState).filter(u => u.group === groupName);
+            document.getElementById('current-group-subtitle').innerText = `${usersInGroup.length} usuarios conectados`;
+
+            renderUsersList(groupName);
+        }
+
+        function renderUsersList(groupName) {
+            const container = document.getElementById('users-list');
+            container.innerHTML = '';
+
+            const users = Object.entries(globalState)
+                .filter(([_, u]) => u.group === groupName)
+                .map(([id, u]) => ({ ...u, id })); // include socketId
+
+            if (users.length === 0) {
+                container.innerHTML = '<div class="text-center mt-10 text-gray-600 text-xs">Sala vacía</div>';
+                return;
+            }
+
+            users.forEach(u => {
+                const isSelected = selectedUser && selectedUser.id === u.id;
+
+                const div = document.createElement('div');
+                div.className = `p-3 mx-2 rounded cursor-pointer border ${isSelected ? 'bg-gray-700 border-blue-500' : 'bg-gray-800 border-gray-700 hover:border-gray-500'}`;
+                div.onclick = () => selectUser(u);
+
+                // Avatar Initials
+                const initials = u.name.substring(0, 2).toUpperCase();
+
+                div.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white shadow">
+                            ${initials}
+                        </div>
+                        <div class="overflow-hidden">
+                            <p class="text-sm font-bold text-gray-200 truncate">${u.name}</p>
+                            <p class="text-[10px] text-gray-500 font-mono truncate">${u.ip}</p>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function selectUser(user) {
+            selectedUser = user;
+            renderUsersList(currentGroup);
+
+            document.getElementById('action-placeholder').classList.add('hidden');
+            document.getElementById('interaction-view').classList.remove('hidden');
+
+            document.getElementById('target-user-name').innerText = user.name;
+            document.getElementById('target-user-ip').innerText = user.ip;
+            document.getElementById('target-user-group').innerText = user.group;
+
+            // Clear previous chat visual or load history if technically possible (but we monitor live)
+            document.getElementById('monitor-chat').innerHTML = '<div class="text-center text-xs text-gray-500 my-4">--- Inicia conversación privada ---</div>';
+        }
+
+        function sendMessage(e) {
+            e.preventDefault();
+            if (!selectedUser) return;
+
+            const input = document.getElementById('msg-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            // Send Private Message via Monitor Event
+            socket.emit('monitor_message', {
+                targetId: selectedUser.id,
+                text: text
+            });
+
+            // Append to my view
+            appendMessage('Yo (Admin)', text, true);
+            input.value = '';
+        }
+
+        function appendMessage(sender, text, isMe) {
+            const container = document.getElementById('monitor-chat');
+            const div = document.createElement('div');
+            div.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'}`;
+            div.innerHTML = `
+                <div class="${isMe ? 'bg-blue-600' : 'bg-gray-700'} max-w-[80%] rounded-lg px-4 py-2 text-sm shadow-md text-white">
+                    <p>${text}</p>
+                </div>
+                <span class="text-[10px] text-gray-500 mt-1">${sender}</span>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Listen for replies
+        socket.on('private_message', (msg) => {
+            // Note: server sends 'private_message' to socketId. 
+            // If we are logged in as monitor, we receive it if it was sent TO us.
+            // Check if it matches selected user
+            if (selectedUser && msg.senderId === selectedUser.id) {
+                appendMessage(msg.sender, msg.text, false);
+            } else {
+                // Should show notification dot on user list - To Do
+            }
+        });
+
+        // Also listen for supervisor_alert if we want to spy? 
+        // For now, simple interaction.
+
+    </script>
+</body>
+
+</html>
