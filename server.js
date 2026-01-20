@@ -7,6 +7,8 @@ const io = new Server(server, {
     maxHttpBufferSize: 50 * 1024 * 1024 // 50MB
 });
 
+app.set('trust proxy', true); // Trust the network to forward real IPs
+
 // --- CONFIGURATION --- //
 const ALLOWED_IP_RANGE = {
     start: { octets: [172, 27, 50, 1] },
@@ -34,7 +36,11 @@ function isIpAllowed(ip) {
 // --- MIDDLEWARE --- //
 app.use(express.json()); // Allow JSON body
 app.use((req, res, next) => {
-    const clientIp = req.ip || req.socket.remoteAddress;
+    // Try to get real IP if behind a proxy
+    let clientIp = req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress;
+    if (clientIp.includes(',')) clientIp = clientIp.split(',')[0].trim();
+    if (clientIp.startsWith('::ffff:')) clientIp = clientIp.substr(7);
+
     if (isIpAllowed(clientIp)) {
         next();
     } else {
@@ -342,7 +348,8 @@ app.post('/api/users/update_password', (req, res) => {
 
 // --- SOCKET.IO --- //
 io.on('connection', (socket) => {
-    let socketIp = socket.handshake.address;
+    let socketIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
+    if (socketIp.includes(',')) socketIp = socketIp.split(',')[0].trim();
     if (socketIp.startsWith('::ffff:')) socketIp = socketIp.substr(7);
 
     if (!isIpAllowed(socketIp)) {
