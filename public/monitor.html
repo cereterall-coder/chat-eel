@@ -80,6 +80,10 @@
             <div class="p-4 border-b border-gray-700 bg-gray-800">
                 <h2 id="current-group-title" class="text-lg font-bold text-white">Selecciona Sala</h2>
                 <p id="current-group-subtitle" class="text-xs text-gray-400">-- usuarios conectados</p>
+                <button onclick="selectGroupChat()" id="btn-broadcast"
+                    class="hidden mt-3 w-full bg-blue-700 hover:bg-blue-600 text-xs text-white font-bold py-1.5 rounded transition">
+                    📢 Enviar Mensaje a Todos
+                </button>
             </div>
 
             <div id="users-list" class="flex-1 overflow-y-auto p-2 space-y-1">
@@ -147,6 +151,7 @@
         let globalState = {}; // { socketId: { name, group, ip, ... } }
         let currentGroup = null;
         let selectedUser = null;
+        let isGroupBroadcast = false;
 
         // --- AUTH ---
         function attemptLogin() {
@@ -228,6 +233,9 @@
             document.getElementById('current-group-subtitle').innerText = `${usersInGroup.length} usuarios conectados`;
 
             renderUsersList(groupName);
+
+            // Show broadcast button
+            document.getElementById('btn-broadcast').classList.remove('hidden');
         }
 
         function renderUsersList(groupName) {
@@ -281,24 +289,48 @@
 
             // Clear previous chat visual or load history if technically possible (but we monitor live)
             document.getElementById('monitor-chat').innerHTML = '<div class="text-center text-xs text-gray-500 my-4">--- Inicia conversación privada ---</div>';
+            isGroupBroadcast = false;
+        }
+
+        function selectGroupChat() {
+            if (!currentGroup) return;
+            selectedUser = null;
+            isGroupBroadcast = true;
+
+            document.getElementById('action-placeholder').classList.add('hidden');
+            document.getElementById('interaction-view').classList.remove('hidden');
+
+            document.getElementById('target-user-name').innerText = "TODOS LOS USUARIOS";
+            document.getElementById('target-user-ip').innerText = "SALA: " + currentGroup;
+            document.getElementById('target-user-group').innerText = currentGroup;
+
+            // Clear for broadcast
+            document.getElementById('monitor-chat').innerHTML = '<div class="text-center text-xs text-gray-500 my-4">--- INICIO DE TRANSMISIÓN (PÚBLICO) ---</div>';
         }
 
         function sendMessage(e) {
             e.preventDefault();
-            if (!selectedUser) return;
+            if (!selectedUser && !isGroupBroadcast) return;
 
             const input = document.getElementById('msg-input');
             const text = input.value.trim();
             if (!text) return;
 
-            // Send Private Message via Monitor Event
-            socket.emit('monitor_message', {
-                targetId: selectedUser.id,
-                text: text
-            });
+            if (isGroupBroadcast) {
+                socket.emit('monitor_broadcast', {
+                    group: currentGroup,
+                    text: text
+                });
+            } else {
+                // Send Private Message via Monitor Event
+                socket.emit('monitor_message', {
+                    targetId: selectedUser.id,
+                    text: text
+                });
+            }
 
             // Append to my view
-            appendMessage('Yo (Admin)', text, true);
+            appendMessage('Yo (' + (isGroupBroadcast ? 'A todos' : 'Admin') + ')', text, true);
             input.value = '';
         }
 

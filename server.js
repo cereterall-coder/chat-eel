@@ -404,6 +404,30 @@ io.on('connection', (socket) => {
         logMessage(messageData);
     });
 
+    socket.on('monitor_broadcast', (payload) => {
+        const user = activeUsers[socket.id];
+        if (!user || user.name !== 'Soporte') return;
+
+        const group = payload.group;
+        if (!group) return;
+
+        const messageData = {
+            id: Date.now() + Math.random(),
+            text: payload.text,
+            sender: user.name, // 'Soporte'
+            senderId: socket.id,
+            group: group,
+            isPrivate: false,
+            timestamp: Date.now()
+        };
+
+        messageHistory.push(messageData);
+        if (messageHistory.length > 50) messageHistory.shift();
+        logMessage(messageData);
+
+        io.to(group).emit('message', messageData);
+    });
+
     socket.on('join', (data) => {
         let username, password;
         if (typeof data === 'string') {
@@ -490,7 +514,7 @@ io.on('connection', (socket) => {
 
         // Send group-filtered history (Newest first for UI so we reverse it)
         const groupHistory = messageHistory.filter(m => m.group === userGroup && !m.isPrivate);
-        socket.emit('history', groupHistory.reverse());
+        socket.emit('history', groupHistory);
 
         // Send Pinned Message
         if (pinnedMessages[userGroup]) {

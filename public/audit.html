@@ -547,7 +547,19 @@
             const tbody = document.getElementById('ips-body');
             tbody.innerHTML = '';
 
-            ipGroups[group].forEach(ip => {
+            // Sort IPs naturally
+            const sortedIps = [...ipGroups[group]].sort((a, b) => {
+                const ipA = a.split('-')[0];
+                const ipB = b.split('-')[0];
+                const partsA = ipA.split('.').map(Number);
+                const partsB = ipB.split('.').map(Number);
+                for (let i = 0; i < 4; i++) {
+                    if (partsA[i] !== partsB[i]) return partsA[i] - partsB[i];
+                }
+                return 0;
+            });
+
+            sortedIps.forEach(ip => {
                 const tr = document.createElement('tr');
                 tr.className = 'border-b last:border-0';
                 tr.innerHTML = `

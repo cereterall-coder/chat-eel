@@ -918,7 +918,6 @@
                 messagesDiv.scrollTop = 0;
             } else {
                 messagesDiv.appendChild(div);
-                messagesDiv.scrollTop = 0;
             }
         }
 
@@ -1068,7 +1067,7 @@
 
         // Override the original appendMessageUI to use the new logic
         function appendMessageUI(msg) {
-            addMsgToUI(msg, 'prepend');
+            addMsgToUI(msg, 'append');
         }
 
         // Update renderMessages to use append for [New...Old] list to form New->Old visual stack?
@@ -1087,8 +1086,7 @@
         }
 
         function scrollToBottom() {
-            // Logic inverted: Scroll to TOP
-            messagesDiv.scrollTop = 0;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
         function showToast(text, error = false) {
