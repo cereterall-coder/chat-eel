@@ -10,10 +10,7 @@ const io = new Server(server, {
 app.set('trust proxy', true); // Trust the network to forward real IPs
 
 // --- CONFIGURATION --- //
-const ALLOWED_IP_RANGE = {
-    start: { octets: [172, 27, 50, 1] },
-    end: { octets: [172, 27, 56, 250] }
-};
+// Authorized network segments are now managed dynamically via allowed_segments.json
 
 // Helper: Check if IP is allowed
 function isIpAllowed(ip) {
@@ -22,24 +19,41 @@ function isIpAllowed(ip) {
     }
     console.log(`Verificando acceso para IP: ${ip}`);
     if (ip === '127.0.0.1' || ip === '::1') return true;
-    const parts = ip.split('.').map(Number);
-    if (parts.length !== 4) return false;
-    if (parts[0] !== 172 || parts[1] !== 27) return false;
-    const octet3 = parts[2];
-    const octet4 = parts[3];
-    if (octet3 < 50 || octet3 > 60) return false;
-    if (octet3 === 50 && octet4 < 1) return false;
-    // Removed strict upper limit for last octet to allow full range up to 60.255
-    return true;
+
+    // Check against authorized segments
+    for (const segment of allowedSegments) {
+        if (segment === ip) return true;
+        if (segment.includes('-') && isIpInRange(ip, segment)) return true;
+    }
+
+    return false;
 }
 
 // --- MIDDLEWARE --- //
 app.use(express.json()); // Allow JSON body
 app.use((req, res, next) => {
     // Try to get real IP if behind a proxy
-    let clientIp = req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress;
+    let clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.ip || req.socket.remoteAddress;
     if (clientIp.includes(',')) clientIp = clientIp.split(',')[0].trim();
     if (clientIp.startsWith('::ffff:')) clientIp = clientIp.substr(7);
+
+    // DEBUG para la IP reportada
+    if (clientIp === '172.27.58.98') {
+        console.log('--- DEBUG IP 172.27.58.98 ---');
+        console.log('Headers:', JSON.stringify(req.headers, null, 2));
+        console.log('RemoteAddress:', req.socket.remoteAddress);
+        console.log('X-Forwarded-For:', req.headers['x-forwarded-for']);
+    }
+
+    // Permitir acceso a paneles administrativos y APIs (estas validan la clave internamente)
+    if (req.path === '/admin_portal.html' ||
+        req.path === '/audit.html' ||
+        req.path === '/launcher.html' ||
+        req.path.startsWith('/api/') ||
+        req.path === '/ip.js' ||
+        req.path === '/logo.png') {
+        return next();
+    }
 
     if (isIpAllowed(clientIp)) {
         next();
@@ -48,13 +62,28 @@ app.use((req, res, next) => {
             <div style="font-family: sans-serif; text-align: center; margin-top: 50px; color: #333;">
                 <h1 style="color: #d32f2f;">Acceso Denegado</h1>
                 <p>Su dirección IP (<strong>${clientIp}</strong>) no está autorizada para acceder a Chat-ELL.</p>
-                <p style="color: #666;">Rango permitido: 172.27.50.1 - 172.27.60.255</p>
+                <div style="margin-top: 20px; padding: 15px; background: #f9f9f9; display: inline-block; border-radius: 8px; border: 1px solid #ddd;">
+                    <p style="color: #666; font-weight: bold; margin-bottom: 5px;">Segmentos Permitidos:</p>
+                    <ul style="list-style: none; padding: 0; margin: 0; color: #888; font-family: monospace;">
+                        ${allowedSegments.map(s => `<li>${s}</li>`).join('')}
+                    </ul>
+                </div>
+                <p style="color: #999; font-size: 0.8em; mt-4">Contacte con el administrador (AMALVIVA) si cree que esto es un error.</p>
             </div>
         `);
     }
 });
 
 app.use(express.static('public'));
+
+// Ruta dinámica para inyectar IP real en el cliente
+app.get('/ip.js', (req, res) => {
+    let clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.ip || req.socket.remoteAddress;
+    if (clientIp.includes(',')) clientIp = clientIp.split(',')[0].trim();
+    if (clientIp.startsWith('::ffff:')) clientIp = clientIp.substr(7);
+    res.type('application/javascript');
+    res.send(`window.REAL_IP = "${clientIp}";`);
+});
 
 // ... (rest of the file until API section)
 
@@ -120,11 +149,14 @@ const fs = require('fs');
 const USERS_FILE = './users.json';
 const ADMIN_KEY_FILE = './admin_key.json';
 const LOG_FILE = './chat_logs.json';
+const SEGMENTS_FILE = './allowed_segments.json';
 
 let activeUsers = {}; // { socketId: { name: "User" } }
 let registeredUsers = {}; // { "User": "password" }
 let messageHistory = [];
 let ADMIN_KEY = '02855470'; // Default
+let allowedSegments = [];
+// ipBridge eliminado en favor de Cookies para mayor fiabilidad
 
 // --- AUTO CLEANUP STATE ---
 let activeDate = new Date().toLocaleDateString();
@@ -148,6 +180,23 @@ if (fs.existsSync(ADMIN_KEY_FILE)) {
     } catch (e) {
         console.error("Error loading admin key", e);
     }
+}
+
+// Load authorized segments
+if (fs.existsSync(SEGMENTS_FILE)) {
+    try {
+        allowedSegments = JSON.parse(fs.readFileSync(SEGMENTS_FILE));
+    } catch (e) {
+        console.error("Error loading segments", e);
+    }
+} else {
+    // Default fallback
+    allowedSegments = ["172.27.50.1-172.27.60.255"];
+    fs.writeFileSync(SEGMENTS_FILE, JSON.stringify(allowedSegments, null, 2));
+}
+
+function saveSegments() {
+    fs.writeFileSync(SEGMENTS_FILE, JSON.stringify(allowedSegments, null, 2));
 }
 
 function saveUsers() {
@@ -285,6 +334,33 @@ app.post('/api/groups', (req, res) => {
     res.status(400).json({ error: 'Invalid action' });
 });
 
+// --- API FOR AUTHORIZED SEGMENTS ---
+app.get('/api/segments', (req, res) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(403).json({ error: 'Unauthorized' });
+    res.json(allowedSegments);
+});
+
+app.post('/api/segments', (req, res) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(403).json({ error: 'Unauthorized' });
+    const { action, segment } = req.body;
+
+    if (action === 'add') {
+        if (!segment) return res.status(400).json({ error: 'Segment required' });
+        if (allowedSegments.includes(segment)) return res.json({ success: true, segments: allowedSegments });
+        allowedSegments.push(segment);
+        saveSegments();
+        return res.json({ success: true, segments: allowedSegments });
+    }
+
+    if (action === 'remove') {
+        allowedSegments = allowedSegments.filter(s => s !== segment);
+        saveSegments();
+        return res.json({ success: true, segments: allowedSegments });
+    }
+
+    res.status(400).json({ error: 'Invalid action' });
+});
+
 // --- API FOR USER MANAGEMENT ---
 app.get('/api/users', (req, res) => {
     if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(403).json({ error: 'Unauthorized' });
@@ -348,9 +424,16 @@ app.post('/api/users/update_password', (req, res) => {
 
 // --- SOCKET.IO --- //
 io.on('connection', (socket) => {
-    let socketIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
+    let socketIp = socket.handshake.query.realIp || socket.handshake.headers['x-forwarded-for'] || socket.handshake.headers['x-real-ip'] || socket.handshake.address;
     if (socketIp.includes(',')) socketIp = socketIp.split(',')[0].trim();
     if (socketIp.startsWith('::ffff:')) socketIp = socketIp.substr(7);
+
+    if (socket.handshake.query.realIp) {
+        // Solo log si la IP es diferente a la de conexión (Proxy detectado)
+        if (socket.handshake.query.realIp !== socket.handshake.address.replace('::ffff:', '')) {
+            console.log(`[IDENTIFICACIÓN] Cliente identificado vía Query: ${socketIp} (Conexión desde ${socket.handshake.address})`);
+        }
+    }
 
     if (!isIpAllowed(socketIp)) {
         console.log(`Socket connection rejected from ${socketIp}`);
@@ -418,21 +501,35 @@ io.on('connection', (socket) => {
         const group = payload.group;
         if (!group) return;
 
-        const messageData = {
-            id: Date.now() + Math.random(),
-            text: payload.text,
-            sender: user.name, // 'Soporte'
-            senderId: socket.id,
-            group: group,
-            isPrivate: false,
-            timestamp: Date.now()
-        };
-
-        messageHistory.push(messageData);
-        if (messageHistory.length > 50) messageHistory.shift();
-        logMessage(messageData);
-
-        io.to(group).emit('message', messageData);
+        if (group === 'ALL') {
+            const messageData = {
+                id: Date.now() + Math.random(),
+                text: payload.text,
+                sender: user.name,
+                senderId: socket.id,
+                group: 'GLOBAL',
+                isPrivate: false,
+                timestamp: Date.now()
+            };
+            messageHistory.push(messageData);
+            if (messageHistory.length > 100) messageHistory.shift();
+            logMessage(messageData);
+            io.emit('message', messageData); // Broadcast to everyone
+        } else {
+            const messageData = {
+                id: Date.now() + Math.random(),
+                text: payload.text,
+                sender: user.name,
+                senderId: socket.id,
+                group: group,
+                isPrivate: false,
+                timestamp: Date.now()
+            };
+            messageHistory.push(messageData);
+            if (messageHistory.length > 100) messageHistory.shift();
+            logMessage(messageData);
+            io.to(group).emit('message', messageData);
+        }
     });
 
     socket.on('join', (data) => {
@@ -769,6 +866,6 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 3005;
 server.listen(PORT, () => {
-    console.log(`Chat-ELL Server running on port ${PORT}`);
+    console.log(`CHAT-RALL Server running on port ${PORT}`);
     console.log(`Allowed IPs: 172.27.50.1 - 172.27.60.255 (+Localhost)`);
 });
