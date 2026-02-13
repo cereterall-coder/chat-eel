@@ -4,15 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat-ELL | Portal de Administración</title>
+    <title>Chat-RALL | PORTAL DIOS</title>
     <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=League+Gothic&display=swap"
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=League+Gothic&family=Orbitron:wght@400;700&display=swap"
         rel="stylesheet">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at top right, #1a1a2e, #16213e, #0f3460);
+            color: #e94560;
         }
 
         .font-logo {
@@ -20,92 +24,402 @@
             letter-spacing: 0.1em;
         }
 
-        .card-hover:hover {
-            transform: translateY(-5px);
+        .font-god {
+            font-family: 'Orbitron', sans-serif;
+            text-transform: uppercase;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .neo-shadow {
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.2);
+        }
+
+        .neo-border {
+            border-color: rgba(233, 69, 96, 0.3);
+        }
+
+        .scroll-custom::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .scroll-custom::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .scroll-custom::-webkit-scrollbar-thumb {
+            background: rgba(233, 69, 96, 0.5);
+            border-radius: 10px;
+        }
+
+        /* Animations */
+        @keyframes pulse-gold {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.05);
+                opacity: 0.8;
+            }
+        }
+
+        .god-pulse {
+            animation: pulse-gold 3s infinite ease-in-out;
         }
     </style>
 </head>
 
-<body class="bg-gray-950 min-h-screen flex items-center justify-center p-6 text-gray-100 relative overflow-hidden">
+<body class="min-h-screen">
 
-    <!-- Background Decoration -->
-    <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div
-            class="absolute top-10 left-10 w-96 h-96 bg-blue-900 rounded-full mix-blend-screen filter blur-[100px] opacity-20 animate-pulse">
-        </div>
-        <div
-            class="absolute bottom-10 right-10 w-96 h-96 bg-purple-900 rounded-full mix-blend-screen filter blur-[100px] opacity-20">
+    <!-- Auth Protection Overlay -->
+    <div id="auth-overlay"
+        class="fixed inset-0 bg-black z-50 flex items-center justify-center transition-all duration-700">
+        <div class="glass p-12 rounded-3xl neo-shadow border-2 neo-border max-w-sm w-full text-center">
+            <div class="god-pulse mb-8">
+                <img src="/logo.png" class="w-32 h-32 mx-auto drop-shadow-[0_0_15px_rgba(233,69,96,0.6)]">
+            </div>
+            <h1 class="font-god text-4xl text-white mb-6">Acceso <br><span class="text-[#e94560]">Nivel DIOS</span></h1>
+            <input type="password" id="dios-key"
+                class="w-full bg-black/40 border border-white/20 p-4 rounded-xl text-white text-center text-xl tracking-[0.5em] focus:outline-none focus:border-[#e94560] transition-all mb-6"
+                placeholder="••••••••">
+            <button onclick="authenticateDios()"
+                class="w-full bg-[#e94560] text-white py-4 rounded-xl font-god text-lg hover:bg-[#ff4d6d] transition-all shadow-[0_0_20px_rgba(233,69,96,0.5)] active:scale-95">
+                DESBLOQUEAR PODER
+            </button>
+            <p id="auth-err" class="text-xs text-red-500 mt-4 opacity-0 transition-opacity">Clave de acceso rechazada
+            </p>
         </div>
     </div>
 
-    <div class="relative z-10 max-w-4xl w-full">
+    <!-- Main GOD Interface -->
+    <div id="god-interface" class="hidden opacity-0 transition-opacity duration-1000 p-4 lg:p-10">
 
-        <header class="text-center mb-12">
-            <h1
-                class="text-6xl font-logo text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-2">
-                CHAT-ELL</h1>
-            <p class="text-gray-400 text-lg font-light tracking-wide uppercase">Portal de Acceso Unificado</p>
+        <header class="flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
+            <div class="flex items-center gap-6">
+                <div class="p-3 bg-white/5 rounded-full border border-white/10">
+                    <img src="/logo.png" class="w-16 h-16">
+                </div>
+                <div>
+                    <h1 class="font-god text-3xl lg:text-5xl text-white tracking-widest">PORTAL <span
+                            class="text-[#e94560]">DIOS</span></h1>
+                    <p class="text-white/40 uppercase text-xs tracking-[0.3em] font-medium mt-1">Control Global de
+                        Mensajería Intranet</p>
+                </div>
+            </div>
+            <div class="flex gap-4 items-center">
+                <div class="glass px-6 py-3 rounded-2xl flex items-center gap-3">
+                    <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_#10b981]"></div>
+                    <span class="text-white text-sm font-semibold uppercase tracking-wider" id="user-count-badge">0
+                        USUARIOS CONECTADOS</span>
+                </div>
+                <button onclick="location.reload()"
+                    class="p-4 glass rounded-2xl hover:bg-white/10 transition text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                </button>
+            </div>
         </header>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[calc(100vh-250px)]">
 
-            <!-- Option 1: Chat General (Index) -->
-            <a href="/"
-                class="group bg-gray-900 border border-gray-800 p-8 rounded-2xl hover:border-blue-500 transition-all duration-300 card-hover shadow-lg hover:shadow-blue-900/20 flex flex-col items-center text-center">
-                <div
-                    class="w-16 h-16 bg-blue-900/30 text-blue-400 rounded-full flex items-center justify-center mb-6 text-2xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                    💬
+            <!-- Left Panel: Users & Groups -->
+            <div class="lg:col-span-4 flex flex-col gap-6">
+                <!-- Global Controls -->
+                <div class="glass p-6 rounded-3xl neo-shadow neo-border">
+                    <h3 class="font-god text-sm text-white/60 mb-4 border-b border-white/5 pb-2">ACCIONES GLOBALES</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <button onclick="setBroadcastTarget('ALL', 'TODOS LOS GRUPOS')"
+                            class="bg-indigo-600/20 border border-indigo-500/50 text-indigo-300 py-3 rounded-xl font-bold text-xs hover:bg-indigo-600/40 transition">
+                            📢 MASIVO (ALL)
+                        </button>
+                        <button onclick="setMaintenanceMessage()"
+                            class="bg-red-600/20 border border-red-500/50 text-red-300 py-3 rounded-xl font-bold text-xs hover:bg-red-600/40 transition">
+                            🛠 MANTENIMIENTO
+                        </button>
+                    </div>
                 </div>
-                <h3 class="text-xl font-bold text-gray-100 mb-2 group-hover:text-blue-400">Sala Pública</h3>
-                <p class="text-sm text-gray-500 leading-relaxed">Acceso a la sala de chat general disponible para todos
-                    los empleados de la red.</p>
-                <span
-                    class="mt-6 text-xs font-bold text-blue-500 uppercase tracking-wider py-1 px-3 border border-blue-900 rounded-full">Usuario
-                    Final</span>
-            </a>
 
-            <!-- Option 2: Monitor (God Mode) -->
-            <a href="/monitor.html"
-                class="group bg-gray-900 border border-gray-800 p-8 rounded-2xl hover:border-purple-500 transition-all duration-300 card-hover shadow-lg hover:shadow-purple-900/20 flex flex-col items-center text-center relative overflow-hidden">
-                <div
-                    class="absolute top-0 right-0 bg-purple-600 text-[10px] font-bold text-white px-2 py-1 rounded-bl-lg">
-                    ADMIN</div>
-                <div
-                    class="w-16 h-16 bg-purple-900/30 text-purple-400 rounded-full flex items-center justify-center mb-6 text-2xl group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                    👁️
+                <!-- Live Users List -->
+                <div class="glass flex-1 p-6 rounded-3xl neo-shadow neo-border flex flex-col min-h-0">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-god text-sm text-white">USUARIOS EN LÍNEA</h3>
+                        <input type="text" id="user-search" onkeyup="renderUserList()" placeholder="Filtrar..."
+                            class="bg-white/5 border border-white/10 rounded-lg px-3 py-1 text-xs text-white focus:outline-none focus:border-[#e94560]">
+                    </div>
+                    <div id="users-live-container" class="flex-1 overflow-y-auto scroll-custom pr-2 space-y-2">
+                        <!-- Dynamic items -->
+                        <p class="text-white/20 text-center text-xs mt-10 italic">Esperando conexión...</p>
+                    </div>
                 </div>
-                <h3 class="text-xl font-bold text-gray-100 mb-2 group-hover:text-purple-400">Monitor Global</h3>
-                <p class="text-sm text-gray-500 leading-relaxed">Supervisión en tiempo real de todos los grupos. Iniciar
-                    sesión privada como 'Soporte'.</p>
-                <span
-                    class="mt-6 text-xs font-bold text-purple-500 uppercase tracking-wider py-1 px-3 border border-purple-900 rounded-full">Modo
-                    Dios</span>
-            </a>
+            </div>
 
-            <!-- Option 3: Audit (Logs) -->
-            <a href="/audit.html"
-                class="group bg-gray-900 border border-gray-800 p-8 rounded-2xl hover:border-red-500 transition-all duration-300 card-hover shadow-lg hover:shadow-red-900/20 flex flex-col items-center text-center relative overflow-hidden">
-                <div class="absolute top-0 right-0 bg-red-600 text-[10px] font-bold text-white px-2 py-1 rounded-bl-lg">
-                    SECURE</div>
-                <div
-                    class="w-16 h-16 bg-red-900/30 text-red-400 rounded-full flex items-center justify-center mb-6 text-2xl group-hover:bg-red-600 group-hover:text-white transition-colors">
-                    🛡️
+            <!-- Right Panel: Command Center -->
+            <div class="lg:col-span-8 flex flex-col gap-6 h-full">
+
+                <!-- Active Room Info -->
+                <div class="glass p-6 rounded-3xl neo-shadow neo-border flex justify-between items-center">
+                    <div>
+                        <span class="text-white/40 text-[10px] uppercase font-bold tracking-widest block mb-1">Enviando
+                            a:</span>
+                        <h2 id="target-display-name" class="font-god text-2xl text-white">SALA GLOBAL (TODOS)</h2>
+                    </div>
+                    <div class="text-right">
+                        <span id="target-label"
+                            class="bg-[#e94560] text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg shadow-[#e94560]/30 uppercase">TRANSMISIÓN</span>
+                    </div>
                 </div>
-                <h3 class="text-xl font-bold text-gray-100 mb-2 group-hover:text-red-400">Auditoría</h3>
-                <p class="text-sm text-gray-500 leading-relaxed">Revisión de históricos, eliminación de registros y
-                    configuración de la red de IPs.</p>
-                <span
-                    class="mt-6 text-xs font-bold text-red-500 uppercase tracking-wider py-1 px-3 border border-red-900 rounded-full">Seguridad</span>
-            </a>
+
+                <!-- Quick Buttons for Masive -->
+                <div class="flex gap-4 flex-wrap">
+                    <button onclick="quickMessage('¡EL CHAT SE CERRARÁ POR MANTENIMIENTO EN 5 MINUTOS!')"
+                        class="glass px-4 py-2 rounded-xl text-xs text-white/70 hover:text-white hover:bg-white/10 transition border border-white/5">⚠️
+                        Cierre 5m</button>
+                    <button onclick="quickMessage('CHAT RESTABLECIDO. GRACIAS PARA SU PACIENCIA.')"
+                        class="glass px-4 py-2 rounded-xl text-xs text-white/70 hover:text-white hover:bg-white/10 transition border border-white/5">✅
+                        Restablecido</button>
+                    <button onclick="quickMessage('POR FAVOR, USAR SOLO PARA TEMAS ESTRICTAMENTE LABORALES.')"
+                        class="glass px-4 py-2 rounded-xl text-xs text-white/70 hover:text-white hover:bg-white/10 transition border border-white/5">💼
+                        Uso Laboral</button>
+                    <button onclick="quickMessage('REINICIE SU NAVEGADOR (F5) PARA ACTUALIZACIONES.')"
+                        class="glass px-4 py-2 rounded-xl text-xs text-white/70 hover:text-white hover:bg-white/10 transition border border-white/5">🔄
+                        Refrescar F5</button>
+                </div>
+
+                <!-- Input Console -->
+                <div class="glass flex-1 p-8 rounded-3xl neo-shadow neo-border flex flex-col gap-6">
+                    <textarea id="command-input"
+                        class="w-full h-full bg-black/20 border-2 border-white/5 rounded-2xl p-6 text-xl text-white focus:outline-none focus:border-[#e94560]/50 transition-all font-medium placeholder-white/10 resize-none"
+                        placeholder="Escribe el mensaje de DIOS aquí..."></textarea>
+
+                    <div class="flex justify-between items-center">
+                        <p class="text-[10px] text-white/30 italic">
+                            Alt + Enter para enviar rápidamente. Los mensajes se envían como "Soporte".
+                        </p>
+                        <button onclick="executeCommand()"
+                            class="bg-[#e94560] hover:bg-[#ff4d6d] text-white px-10 py-5 rounded-2xl font-god text-xl shadow-2xl transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-4">
+                            <span>ENVIAR PODER</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
 
         </div>
 
-        <footer class="mt-16 text-center text-xs text-gray-600">
-            <p>Sistema Privado de Comunicación Interna | v2.5</p>
-        </footer>
-
     </div>
 
+    <!-- Feedback Toast -->
+    <div id="god-toast"
+        class="fixed bottom-10 left-1/2 transform -translate-x-1/2 glass px-10 py-4 rounded-2xl border-2 neo-border neo-shadow text-white font-god text-sm translate-y-32 opacity-0 transition-all duration-500 z-50">
+        Comando Ejecutado Exitosamente
+    </div>
+
+    <script>
+        let adminKey = '';
+        let socket = null;
+        let allUsers = {};
+        let currentTarget = { id: 'ALL', name: 'TODOS LOS GRUPOS', type: 'BROADCAST' };
+
+        async function authenticateDios() {
+            const keyInput = document.getElementById('dios-key');
+            const key = keyInput.value;
+            const err = document.getElementById('auth-err');
+
+            try {
+                const res = await fetch('/api/audit/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: key })
+                });
+
+                if (res.ok) {
+                    adminKey = key;
+                    initGodMode();
+                } else {
+                    err.classList.remove('opacity-0');
+                    keyInput.classList.add('border-red-500');
+                    setTimeout(() => {
+                        err.classList.add('opacity-0');
+                        keyInput.classList.remove('border-red-500');
+                    }, 2000);
+                }
+            } catch (e) {
+                alert('Fallo de conexión orbital.');
+            }
+        }
+
+        function initGodMode() {
+            // UI Switch
+            document.getElementById('auth-overlay').classList.add('opacity-0', 'pointer-events-none');
+            const interface = document.getElementById('god-interface');
+            interface.classList.remove('hidden');
+            setTimeout(() => interface.classList.add('opacity-100'), 100);
+
+            // Socket Connect
+            socket = io();
+
+            socket.on('connect', () => {
+                socket.emit('monitor_auth', adminKey);
+            });
+
+            socket.on('monitor_update', (users) => {
+                allUsers = users;
+                renderUserList();
+                updateStats();
+            });
+
+            socket.on('monitor_auth_result', (data) => {
+                if (!data.success) {
+                    alert('Error de Token Monitor: ' + data.error);
+                    location.reload();
+                }
+            });
+        }
+
+        function renderUserList() {
+            const container = document.getElementById('users-live-container');
+            const search = document.getElementById('user-search').value.toLowerCase();
+            container.innerHTML = '';
+
+            // Group users by Room/Group
+            const grouped = {};
+            Object.entries(allUsers).forEach(([id, u]) => {
+                if (u.hidden) return; // Skip other monitors
+                if (!grouped[u.group]) grouped[u.group] = [];
+                grouped[u.group].push({ id, ...u });
+            });
+
+            // Sort groups
+            const groupNames = Object.keys(grouped).sort();
+
+            groupNames.forEach(group => {
+                const groupEl = document.createElement('div');
+                groupEl.className = 'mb-6';
+                groupEl.innerHTML = `
+                    <div class="flex justify-between items-center mb-2 px-2 sticky top-0 bg-[#16213e] z-10 py-1">
+                        <span class="text-[10px] text-white/50 font-bold uppercase tracking-widest">SALA: ${group}</span>
+                        <button onclick="setBroadcastTarget('${group}', '${group}')" class="text-[9px] bg-white/10 hover:bg-white/20 px-2 py-0.5 rounded text-white font-bold transition">BROADCAST</button>
+                    </div>
+                `;
+
+                const list = document.createElement('div');
+                list.className = 'space-y-1';
+
+                grouped[group].forEach(u => {
+                    if (search && !u.name.toLowerCase().includes(search) && !u.ip.includes(search)) return;
+
+                    const active = currentTarget.id === u.id;
+                    const item = document.createElement('div');
+                    item.className = `p-3 rounded-xl border border-white/5 cursor-pointer transition-all flex justify-between items-center ${active ? 'bg-[#e94560]/20 border-[#e94560]/40' : 'bg-white/5 hover:bg-white/10'}`;
+                    item.onclick = () => setDirectTarget(u.id, u.name, u.group);
+
+                    item.innerHTML = `
+                        <div class="min-w-0">
+                            <div class="text-xs font-bold text-white truncate">${u.name} ${u.isSupervisor ? '⭐' : ''}</div>
+                            <div class="text-[9px] text-white/30 font-mono">${u.ip}</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            ${u.isSupervisor ? '<span class="text-[8px] border border-yellow-500/50 text-yellow-500 px-1 rounded">SUP</span>' : ''}
+                            <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                        </div>
+                    `;
+                    list.appendChild(item);
+                });
+
+                if (list.children.length > 0) {
+                    groupEl.appendChild(list);
+                    container.appendChild(groupEl);
+                }
+            });
+        }
+
+        function updateStats() {
+            const count = Object.values(allUsers).filter(u => !u.hidden).length;
+            document.getElementById('user-count-badge').textContent = `${count} USUARIOS CONECTADOS`;
+        }
+
+        function setBroadcastTarget(id, name) {
+            currentTarget = { id, name, type: 'BROADCAST' };
+            updateTargetUI();
+        }
+
+        function setDirectTarget(id, name, group) {
+            currentTarget = { id, name, type: 'PRIVATE', group };
+            updateTargetUI();
+            renderUserList(); // Update highlight
+        }
+
+        function updateTargetUI() {
+            const display = document.getElementById('target-display-name');
+            const label = document.getElementById('target-label');
+
+            display.textContent = currentTarget.type === 'BROADCAST'
+                ? `SALA ${currentTarget.name}`
+                : `${currentTarget.name} (${currentTarget.group})`;
+
+            label.textContent = currentTarget.type;
+            label.className = `text-[10px] font-bold px-3 py-1 rounded-full shadow-lg uppercase ${currentTarget.type === 'BROADCAST' ? 'bg-[#e94560] shadow-[#e94560]/30' : 'bg-blue-600 shadow-blue-600/30'}`;
+        }
+
+        function setMaintenanceMessage() {
+            const input = document.getElementById('command-input');
+            input.value = "⚠️ AVISO DEL SISTEMA: El chat se cerrará por mantenimiento breve en unos instantes. Por favor guarde cualquier información importante.";
+        }
+
+        function quickMessage(text) {
+            document.getElementById('command-input').value = text;
+        }
+
+        function executeCommand() {
+            const text = document.getElementById('command-input').value.trim();
+            if (!text) return;
+
+            if (currentTarget.type === 'BROADCAST') {
+                socket.emit('monitor_broadcast', { group: currentTarget.id, text: text });
+            } else {
+                socket.emit('monitor_message', { targetId: currentTarget.id, text: text });
+            }
+
+            flashToast(currentTarget.type === 'BROADCAST' ? 'MENSAJE MASIVO ENVIADO' : `MENSAJE ENVIADO A ${currentTarget.name}`);
+            document.getElementById('command-input').value = '';
+        }
+
+        function flashToast(msg) {
+            const t = document.getElementById('god-toast');
+            t.textContent = msg;
+            t.classList.remove('translate-y-32', 'opacity-0');
+            setTimeout(() => {
+                t.classList.add('translate-y-32', 'opacity-0');
+            }, 3000);
+        }
+
+        // Enter triggers
+        document.getElementById('command-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.altKey || e.ctrlKey)) {
+                executeCommand();
+            }
+        });
+
+        document.getElementById('dios-key').addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') authenticateDios();
+        });
+    </script>
 </body>
 
 </html>

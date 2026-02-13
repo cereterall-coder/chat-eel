@@ -46,7 +46,9 @@
         <button onclick="switchTab('config')" id="tab-config"
             class="px-4 py-2 bg-gray-200 rounded-t-lg font-bold text-gray-600 hover:bg-white transition">Config.
             Red</button>
-
+        <button onclick="switchTab('segments')" id="tab-segments"
+            class="px-4 py-2 bg-gray-200 rounded-t-lg font-bold text-gray-600 hover:bg-white transition">Acceso
+            Global</button>
         <button onclick="switchTab('admin')" id="tab-admin"
             class="px-4 py-2 bg-gray-200 rounded-t-lg font-bold text-gray-600 hover:bg-white transition">Admin</button>
     </div>
@@ -55,7 +57,7 @@
     <div id="dashboard-audit" class="hidden container mx-auto p-6 bg-white rounded-b-lg shadow-sm min-h-[80vh]">
         <header class="flex justify-between items-center mb-8 border-b pb-4">
             <div>
-                <h1 class="text-3xl font-logo tracking-wide text-gray-800">Chat-ELL <span
+                <h1 class="text-3xl font-logo tracking-wide text-gray-800">CHAT-RALL <span
                         class="text-red-600">AUDITORÍA</span></h1>
                 <p class="text-sm text-gray-500">Registro de Mensajes</p>
             </div>
@@ -99,12 +101,12 @@
                 </span>
                 <div class="flex items-center gap-2">
                     <span class="text-xs text-red-600">Desde</span>
-                    <input type="date" id="del-start"
+                    <input type="date" id="del-start" onchange="renderLogs()"
                         class="border border-red-200 bg-white p-1 rounded text-sm focus:outline-none focus:border-red-500 text-gray-600">
                 </div>
                 <div class="flex items-center gap-2">
                     <span class="text-xs text-red-600">Hasta</span>
-                    <input type="date" id="del-end"
+                    <input type="date" id="del-end" onchange="renderLogs()"
                         class="border border-red-200 bg-white p-1 rounded text-sm focus:outline-none focus:border-red-500 text-gray-600">
                 </div>
             </div>
@@ -212,7 +214,49 @@
         </div>
     </div>
 
-    <p class="text-center text-xs text-gray-400 mt-6">Sistema desarrollado por Ing. A. Alexis V. Vargas</p>
+    <p class="text-center text-xs text-gray-400 mt-6">Sistema desarrollado por AMALVIVA - Tfno: 944499069</p>
+
+    <!-- Main Dashboard: Authorized Segments -->
+    <div id="dashboard-segments" class="hidden container mx-auto p-6 bg-white rounded-b-lg shadow-sm min-h-[80vh]">
+        <header class="flex justify-between items-center mb-8 border-b pb-4">
+            <div>
+                <h1 class="text-3xl font-logo tracking-wide text-gray-800">Chat-ELL <span class="text-green-600">ACCESO
+                        GLOBAL</span></h1>
+                <p class="text-sm text-gray-500">Configuración de Firewall de Red (Segmentos Autorizados)</p>
+            </div>
+            <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500 underline">Cerrar Sesión</button>
+        </header>
+
+        <div class="max-w-2xl mx-auto">
+            <div class="bg-gray-50 p-6 rounded-lg border mb-6 flex gap-4 items-center">
+                <span class="text-sm font-bold text-gray-700">Autorizar Segmento/IP:</span>
+                <input type="text" id="new-segment-input" class="border p-2 rounded text-sm flex-1"
+                    placeholder="Ej: 172.31.0.0-172.31.255.255">
+                <button onclick="addSegment()"
+                    class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 font-bold shadow">
+                    AUTORIZAR
+                </button>
+            </div>
+
+            <div class="bg-white rounded-lg border overflow-hidden">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-100 text-xs text-gray-700 uppercase">
+                        <tr>
+                            <th class="px-4 py-3">Segmento de Red Autorizado</th>
+                            <th class="px-4 py-3 text-right">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="segments-body"></tbody>
+                </table>
+            </div>
+            <p class="text-xs text-gray-500 mt-4 leading-relaxed">
+                <strong>Nota:</strong> Solo las IPs que pertenezcan a estos segmentos podrán cargar la página del chat.
+                Si
+                una IP no está aquí, verá un mensaje de "Acceso Denegado". El sistema siempre permite 127.0.0.1 por
+                defecto.
+            </p>
+        </div>
+    </div>
 
     <!-- Main Dashboard: Admin Security -->
     <div id="dashboard-admin" class="hidden container mx-auto p-6 bg-white rounded-b-lg shadow-sm min-h-[80vh]">
@@ -292,14 +336,14 @@
             // Hide all
             document.getElementById('dashboard-audit').classList.add('hidden');
             document.getElementById('dashboard-config').classList.add('hidden');
-
+            document.getElementById('dashboard-segments').classList.add('hidden');
             document.getElementById('dashboard-admin').classList.add('hidden');
 
             // Reset Tabs
             const inactiveClass = "px-4 py-2 bg-gray-200 rounded-t-lg font-bold text-gray-600 hover:bg-white transition cursor-pointer";
             document.getElementById('tab-audit').className = inactiveClass;
             document.getElementById('tab-config').className = inactiveClass;
-
+            document.getElementById('tab-segments').className = inactiveClass;
             document.getElementById('tab-admin').className = inactiveClass;
 
             if (tab === 'audit') {
@@ -310,7 +354,10 @@
                 document.getElementById('dashboard-config').classList.remove('hidden');
                 document.getElementById('tab-config').className = "px-4 py-2 bg-white rounded-t-lg font-bold text-blue-700 border-b-2 border-blue-500 cursor-default";
                 fetchGroups();
-
+            } else if (tab === 'segments') {
+                document.getElementById('dashboard-segments').classList.remove('hidden');
+                document.getElementById('tab-segments').className = "px-4 py-2 bg-white rounded-t-lg font-bold text-green-700 border-b-2 border-green-500 cursor-default";
+                fetchSegments();
             } else if (tab === 'admin') {
                 document.getElementById('dashboard-admin').classList.remove('hidden');
                 document.getElementById('tab-admin').className = "px-4 py-2 bg-white rounded-t-lg font-bold text-gray-800 border-b-2 border-gray-600 cursor-default";
@@ -345,11 +392,21 @@
             const searchUser = document.getElementById('filter-user').value.toLowerCase();
             const searchContent = document.getElementById('filter-content').value.toLowerCase();
             const searchGroup = document.getElementById('filter-group').value;
+            const startDateStr = document.getElementById('del-start').value;
+            const endDateStr = document.getElementById('del-end').value;
+
+            // Convertir fechas de filtro a timestamps si existen
+            let filterStartTime = startDateStr ? new Date(startDateStr + 'T00:00:00').getTime() : null;
+            let filterEndTime = endDateStr ? new Date(endDateStr + 'T23:59:59').getTime() : null;
 
             tbody.innerHTML = '';
 
             const filtered = allLogs.filter(log => {
-                // Filter by Group
+                // Filtro por Fecha (Rango de Eliminación/Vista)
+                if (filterStartTime && log.timestamp < filterStartTime) return false;
+                if (filterEndTime && log.timestamp > filterEndTime) return false;
+
+                // Filtro por Grupo
                 if (searchGroup && log.group !== searchGroup) return false;
                 // If log user, check sender, senderId, or targetId (if private)
                 const senderMatch = (log.sender || '').toLowerCase().includes(searchUser);
@@ -610,6 +667,71 @@
             if (!confirm(`¿Quitar IP ${ip}?`)) return;
             await apiGroupAction({ action: 'remove_ip', group: currentGroup, ip: ip });
             fetchGroups();
+        }
+
+        // --- AUTHORIZED SEGMENTS LOGIC ---
+        let allowedSegments = [];
+
+        async function fetchSegments() {
+            try {
+                const res = await fetch('/api/segments', { headers: { 'x-admin-key': adminKey } });
+                if (res.ok) {
+                    allowedSegments = await res.json();
+                    renderSegments();
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function renderSegments() {
+            const tbody = document.getElementById('segments-body');
+            tbody.innerHTML = '';
+
+            allowedSegments.forEach(segment => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b last:border-0';
+                tr.innerHTML = `
+                    <td class="px-4 py-3 font-mono text-gray-600">${segment}</td>
+                    <td class="px-4 py-3 text-right">
+                        <button onclick="removeSegment('${segment}')" class="text-red-500 hover:text-red-700 text-xs font-bold">ELIMINAR</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function addSegment() {
+            const segment = document.getElementById('new-segment-input').value.trim();
+            if (!segment) return;
+
+            try {
+                const res = await fetch('/api/segments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+                    body: JSON.stringify({ action: 'add', segment: segment })
+                });
+                if (res.ok) {
+                    document.getElementById('new-segment-input').value = '';
+                    fetchSegments();
+                }
+            } catch (e) {
+                alert('Error al agregar segmento');
+            }
+        }
+
+        async function removeSegment(segment) {
+            if (!confirm(`¿Estás seguro de quitar el acceso al segmento ${segment}?`)) return;
+            try {
+                const res = await fetch('/api/segments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+                    body: JSON.stringify({ action: 'remove', segment: segment })
+                });
+                if (res.ok) fetchSegments();
+            } catch (e) {
+                alert('Error al eliminar segmento');
+            }
         }
 
 

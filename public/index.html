@@ -13,6 +13,7 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
+    <script src="/ip.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -103,10 +104,10 @@
         <div
             class="bg-white/95 backdrop-blur-sm p-8 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] w-96 text-center transform scale-100 transition-transform border border-white/20 relative z-10">
 
-            <img src="/logo.png" alt="Chat-EEL Logo"
+            <img src="/logo.png" alt="CHAT-RALL Logo"
                 class="w-24 h-24 mx-auto mb-3 object-contain drop-shadow-xl hover:scale-105 transition-transform duration-300">
 
-            <h2 class="text-5xl text-gray-800 mb-0 font-logo tracking-wide drop-shadow-sm leading-none">Chat-EEL</h2>
+            <h2 class="text-5xl text-gray-800 mb-0 font-logo tracking-wide drop-shadow-sm leading-none">CHAT-RALL</h2>
             <p class="text-gray-500 text-[10px] uppercase tracking-widest mb-5 font-semibold">Mensajería Intranet
                 Exclusiva
             </p>
@@ -145,12 +146,9 @@
             </button>
 
             <div class="mt-5 pt-3 border-t border-gray-50">
-                <div class="text-sm text-green-800 font-bold tracking-wide font-hand leading-none whitespace-nowrap">
-                    Copy Right 2026: Ing. A. Alexis V. Vargas - Tfno: 944499069</div>
-                <div
-                    class="text-sm text-green-800 font-bold tracking-wide font-hand mt-1 leading-none whitespace-nowrap">
-                    Colaboración:
-                    Blanca La Rosa Avalos</div>
+                <div style="font-family: Arial, sans-serif; font-size: 8pt;"
+                    class="text-green-800 font-bold tracking-wide leading-none whitespace-nowrap">
+                    Copy Right &copy; 2026: AMALVIVA - Tfno: 944499069</div>
             </div>
         </div>
     </div>
@@ -167,7 +165,7 @@
                     <img src="/logo.png" alt="Logo"
                         class="w-10 h-10 object-contain bg-white rounded-full p-1 shadow-sm">
                     <div>
-                        <h2 class="font-logo text-2xl tracking-wide text-gray-800 leading-none">Chat-EEL</h2>
+                        <h2 class="font-logo text-2xl tracking-wide text-gray-800 leading-none">CHAT-RALL</h2>
                         <div class="flex items-center gap-1 mt-0.5" id="user-status-display">
                             <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                             <span class="text-[10px] text-gray-500 font-medium uppercase tracking-wider"
@@ -374,7 +372,9 @@
 
     <!-- Client Logic -->
     <script>
-        const socket = io();
+        const socket = io({
+            query: { realIp: window.REAL_IP || '' }
+        });
         let myUsername = '';
         let myId = '';
         let activeChat = 'general'; // 'general' or socketId
