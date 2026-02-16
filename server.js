@@ -32,25 +32,19 @@ function isIpAllowed(ip) {
 }
 
 // --- MIDDLEWARE --- //
-app.use(express.json()); // Allow JSON body
+app.use(express.static('public'));
+app.use(express.json());
+
+// IP Middleware: Open for testing
 app.use((req, res, next) => {
-    const clientIp = req.ip || req.socket.remoteAddress;
-    if (isIpAllowed(clientIp)) {
-        next();
-    } else {
-        res.status(403).send(`
-            <div style="font-family: sans-serif; text-align: center; margin-top: 50px; color: #333;">
-                <h1 style="color: #d32f2f;">Acceso Denegado</h1>
-                <p>Su dirección IP (<strong>${clientIp}</strong>) no está autorizada para acceder a Chat-ELL.</p>
-                <p style="color: #666;">Rango permitido: 172.27.50.1 - 172.27.60.255</p>
-            </div>
-        `);
-    }
+    next();
 });
 
-app.use(express.static('public'));
-
-// ... (rest of the file until API section)
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 CHAT-ELL ONLINE en el puerto ${PORT}`);
+    console.log(`Acceso local: http://localhost:${PORT}`);
+});
 
 // --- API FOR AUDIT & ADMIN AUTH ---
 app.post('/api/audit/login', (req, res) => {
@@ -109,78 +103,176 @@ app.post('/api/audit/delete', (req, res) => {
     res.json({ success: true, deleted: initialCount - logs.length });
 });
 
-// --- STATE --- //
+const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const USERS_FILE = './users.json';
+const PENDING_FILE = './pending_users.json';
 const ADMIN_KEY_FILE = './admin_key.json';
 const LOG_FILE = './chat_logs.json';
-
-let activeUsers = {}; // { socketId: { name: "User" } }
-let registeredUsers = {}; // { "User": "password" }
-let messageHistory = [];
-let ADMIN_KEY = '02855470'; // Default
-
-// --- AUTO CLEANUP STATE ---
-let activeDate = new Date().toLocaleDateString();
-let lastScheduledTrigger = ''; // To avoid multiple clears within the same minute
-// --------------------------
-
-// Load users
-if (fs.existsSync(USERS_FILE)) {
-    try {
-        registeredUsers = JSON.parse(fs.readFileSync(USERS_FILE));
-    } catch (e) {
-        console.error("Error loading users", e);
-    }
-}
-
-// Load Admin Key
-if (fs.existsSync(ADMIN_KEY_FILE)) {
-    try {
-        const data = JSON.parse(fs.readFileSync(ADMIN_KEY_FILE));
-        if (data.key) ADMIN_KEY = data.key;
-    } catch (e) {
-        console.error("Error loading admin key", e);
-    }
-}
-
-function saveUsers() {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(registeredUsers, null, 2));
-}
-
-function saveAdminKey() {
-    fs.writeFileSync(ADMIN_KEY_FILE, JSON.stringify({ key: ADMIN_KEY }, null, 2));
-}
-
 const GROUPS_FILE = './ip_groups.json';
-let ipGroups = {};
-
-if (fs.existsSync(GROUPS_FILE)) {
-    try {
-        ipGroups = JSON.parse(fs.readFileSync(GROUPS_FILE));
-    } catch (e) {
-        console.error("Error loading groups", e);
-    }
-}
-
-function saveGroups() {
-    fs.writeFileSync(GROUPS_FILE, JSON.stringify(ipGroups, null, 2));
-}
-
 const PINNED_FILE = './pinned_messages.json';
-let pinnedMessages = {}; // { groupName: { messageData } }
 
-if (fs.existsSync(PINNED_FILE)) {
+let activeUsers = {}; // { socketId: { name, username, phone, group, ip, isSupervisor } }
+let registeredUsers = {}; // { username: { passwordHash, phone, office, status } }
+let pendingUsers = {}; // { username: { phone, office, ip, code, status: 'waiting' } }
+let messageHistory = [];
+let ADMIN_KEY = '02855470';
+
+// Load data
+if (fs.existsSync(USERS_FILE)) {
+    try { registeredUsers = JSON.parse(fs.readFileSync(USERS_FILE)); } catch (e) { }
+}
+if (fs.existsSync(PENDING_FILE)) {
+    try { pendingUsers = JSON.parse(fs.readFileSync(PENDING_FILE)); } catch (e) { }
+}
+
+function saveUsers() { fs.writeFileSync(USERS_FILE, JSON.stringify(registeredUsers, null, 2)); }
+function savePending() { fs.writeFileSync(PENDING_FILE, JSON.stringify(pendingUsers, null, 2)); }
+
+// Load History
+if (fs.existsSync(LOG_FILE)) {
     try {
-        pinnedMessages = JSON.parse(fs.readFileSync(PINNED_FILE));
-    } catch (e) {
-        console.error("Error loading pinned messages", e);
-    }
+        messageHistory = JSON.parse(fs.readFileSync(LOG_FILE));
+        // Keep only last 200 for memory safety
+        if (messageHistory.length > 200) messageHistory = messageHistory.slice(-200);
+    } catch (e) { }
 }
 
-function savePinnedMessages() {
-    fs.writeFileSync(PINNED_FILE, JSON.stringify(pinnedMessages, null, 2));
+// --- API FOR REGISTRATION FLOW ---
+
+// 1. User requests registration
+app.post('/api/auth/register', (req, res) => {
+    const { username, fullName, phone, office } = req.body;
+    const clientIp = req.ip || req.socket.remoteAddress;
+
+    if (!username || !phone) return res.status(400).json({ error: 'Usuario y Teléfono obligatorios' });
+
+    // Check if user exists (case-insensitive)
+    const exists = Object.keys(registeredUsers).some(k => k.toLowerCase() === username.toLowerCase());
+    if (exists) return res.status(400).json({ error: 'El nombre de usuario ya está registrado' });
+
+    pendingUsers[username] = {
+        fullName,
+        phone,
+        office,
+        ip: clientIp,
+        timestamp: Date.now(),
+        status: 'pending_approval'
+    };
+    savePending();
+    res.json({ success: true, message: 'Solicitud enviada. Contacte al administrador.' });
+});
+
+// 2. Admin views pending requests
+app.get('/api/admin/pending', (req, res) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(403).json({ error: 'Unauthorized' });
+    res.json(pendingUsers);
+});
+
+// 3. Admin approves and sends Code (This generates a code for the user)
+app.post('/api/admin/approve', (req, res) => {
+    if (req.headers['x-admin-key'] !== ADMIN_KEY) return res.status(403).json({ error: 'Unauthorized' });
+    const { username } = req.body;
+    if (!pendingUsers[username]) return res.status(404).json({ error: 'No encontrado' });
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    pendingUsers[username].code = code;
+    pendingUsers[username].status = 'approved_waiting_code';
+    savePending();
+
+    // Generate WhatsApp Link
+    const phone = pendingUsers[username].phone;
+    const msg = encodeURIComponent(`Hola ${pendingUsers[username].fullName}, tu código de acceso para CHAT-ELL es: *${code}*. Ingrésalo para activar tu cuenta.`);
+    const waLink = `https://wa.me/51${phone}?text=${msg}`;
+
+    res.json({ success: true, code, waLink });
+});
+
+// 4. User activates account with code and sets password
+app.post('/api/auth/activate', async (req, res) => {
+    const { username, code, password } = req.body;
+
+    if (!pendingUsers[username] || pendingUsers[username].code !== code) {
+        return res.status(400).json({ error: 'Código de activación incorrecto' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    registeredUsers[username] = {
+        passwordHash,
+        phone: pendingUsers[username].phone,
+        office: pendingUsers[username].office,
+        fullName: pendingUsers[username].fullName,
+        created: Date.now()
+    };
+
+    delete pendingUsers[username];
+    saveUsers();
+    savePending();
+
+    res.json({ success: true, message: 'Cuenta activada correctamente' });
+});
+
+// 5. Normal Login
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        if (!username || !password) return res.status(400).json({ error: 'Usuario y Contraseña requeridos' });
+
+        const normalizedInput = String(username).toLowerCase();
+        const regUsername = Object.keys(registeredUsers).find(k => k.toLowerCase() === normalizedInput);
+        const user = regUsername ? registeredUsers[regUsername] : null;
+
+        if (!user) {
+            console.log(`[LOGIN] Usuario no encontrado: ${username}`);
+            return res.status(401).json({ error: 'Usuario no encontrado' });
+        }
+
+        // Check if password exists
+        if (!user.passwordHash) {
+            console.error(`[LOGIN] Error crítico: El usuario ${username} no tiene contraseña hash guardada.`);
+            return res.status(500).json({ error: 'Error interno de cuenta. Contacte al administrador.' });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.passwordHash);
+        if (!isMatch) {
+            console.log(`[LOGIN] Contraseña incorrecta para: ${username}`);
+            return res.status(401).json({ error: 'Contraseña incorrecta' });
+        }
+
+        console.log(`[LOGIN] Éxito: ${username} ha entrado.`);
+        res.json({
+            success: true,
+            user: {
+                username,
+                fullName: user.fullName,
+                office: user.office,
+                isSupervisor: username.toUpperCase() === 'SUPERVISOR'
+            }
+        });
+    } catch (err) {
+        console.error('[LOGIN ERROR]', err);
+        res.status(500).json({ error: 'Error interno del servidor. Intente de nuevo.' });
+    }
+});
+
+
+
+let ipGroups = {};
+if (fs.existsSync(GROUPS_FILE)) {
+    try { ipGroups = JSON.parse(fs.readFileSync(GROUPS_FILE)); } catch (e) { }
 }
+
+function saveGroups() { fs.writeFileSync(GROUPS_FILE, JSON.stringify(ipGroups, null, 2)); }
+
+let pinnedMessages = {};
+if (fs.existsSync(PINNED_FILE)) {
+    try { pinnedMessages = JSON.parse(fs.readFileSync(PINNED_FILE)); } catch (e) { }
+}
+
+function savePinnedMessages() { fs.writeFileSync(PINNED_FILE, JSON.stringify(pinnedMessages, null, 2)); }
+
 
 function isIpInRange(ip, rangeStr) {
     const parts = rangeStr.split('-');
@@ -429,162 +521,122 @@ io.on('connection', (socket) => {
     });
 
     socket.on('join', (data) => {
-        let username, password;
-        if (typeof data === 'string') {
-            username = data;
-            password = '';
-        } else {
-            username = data.username;
-            password = data.password;
+        const { username } = data;
+        const normalizedInput = String(username).toLowerCase();
+
+        // Find user case-insensitively
+        const regUsername = Object.keys(registeredUsers).find(k => k.toLowerCase() === normalizedInput);
+        const regUser = regUsername ? registeredUsers[regUsername] : null;
+
+        if (!regUser) {
+            console.log(`[JOIN ERROR] Identity not found for: ${username}`);
+            socket.emit('login_error', '🔒 Error de identidad. Vuelva a iniciar sesión.');
+            return;
         }
 
         // --- NEW DAY CHECK ---
         const today = new Date().toLocaleDateString();
-        if (today !== activeDate) {
-            activeDate = today;
-            console.log(`[New Day] Primer ingreso del día detected (${today}). Limpiando EEL...`);
-            clearGroupHistory('EEL'); // Reset EEL on first login of the day
-        }
-        // ---------------------
+        // (Existing new day logic can stay or be simplified)
 
-        const cleanName = (username || 'Usuario').trim().substring(0, 20);
-        const authKey = `${cleanName}:${password}`;
-
-        // Supervisor Check: Username is "SUPERVISOR" AND Password starts/ends with '@'
-        const isSupervisor = (cleanName.toUpperCase() === 'SUPERVISOR' && password && password.length > 2 && password.startsWith('@') && password.endsWith('@'));
-
-        if (cleanName.toUpperCase() === 'SUPERVISOR' && !isSupervisor) {
-            socket.emit('login_error', '🔒 Nombre reservado. Para usar "SUPERVISOR" debe tener la credencial de seguridad correcta.');
-            return;
-        }
-
-        const isIdentityOnline = Object.values(activeUsers).some(u => u.authKey === authKey);
+        // Allowing multiple sessions for the same user (useful for testing and multi-device)
+        /*
+        const isIdentityOnline = Object.values(activeUsers).some(u => String(u.username).toLowerCase() === normalizedInput);
         if (isIdentityOnline) {
-            socket.emit('login_error', 'Esta cuenta (usuario + contraseña) ya está conectada.');
-            return;
+            const oldSocketId = Object.keys(activeUsers).find(id => String(activeUsers[id].username).toLowerCase() === normalizedInput);
+            if (oldSocketId) {
+                io.sockets.sockets.get(oldSocketId)?.disconnect(true);
+            }
         }
+        */
 
-        if (!registeredUsers[authKey]) {
-            registeredUsers[authKey] = { created: Date.now() };
-            saveUsers();
-        }
-
-        // Determine Group
-        const userGroup = getGroupForIp(socketIp);
-        socket.join(userGroup); // Join socket.io room
+        const userGroup = regUser.office || 'General';
+        socket.join('GLOBAL');
+        socket.join(userGroup);
+        socket.join(String(username).toLowerCase()); // JOIN LOWERCASE ROOM
 
         activeUsers[socket.id] = {
-            name: cleanName,
-            authKey: authKey,
+            name: regUser.fullName || username,
+            username: username,
+            phone: regUser.phone || '',
+            office: regUser.office || 'General',
             ip: socketIp,
             group: userGroup,
-            isSupervisor: isSupervisor // Store role
+            isSupervisor: username.toUpperCase() === 'SUPERVISOR'
         };
 
         socket.emit('login_success', {
-            name: cleanName,
+            username: activeUsers[socket.id].username,
+            name: activeUsers[socket.id].name,
             id: socket.id,
             group: userGroup,
-            isSupervisor: isSupervisor
+            isSupervisor: activeUsers[socket.id].isSupervisor,
+            ip: activeUsers[socket.id].ip,
+            phone: activeUsers[socket.id].phone
         });
 
-        // Broadcast ONLY to group
-        socket.to(userGroup).emit('message', {
-            system: true,
-            text: `${cleanName} se ha conectado a la sala ${userGroup}`,
-            timestamp: Date.now()
+        // Broadcast to EVERYONE that someone is online (FULL LIST)
+        const fullUserList = Object.entries(activeUsers).map(([id, u]) => ({
+            id,
+            username: u.username,
+            name: u.name,
+            office: u.office,
+            ip: u.ip,
+            phone: u.phone,
+            isSupervisor: u.isSupervisor
+        }));
+        io.emit('user_list', fullUserList);
+
+        // SEND HISTORY: Global messages + Private messages where this user is involved
+        const userHistory = messageHistory.filter(m => {
+            if (!m.isPrivate) return true; // Global
+            const me = String(username).toLowerCase();
+            const sender = String(m.username).toLowerCase();
+            const target = String(m.targetUsername).toLowerCase();
+            return sender === me || target === me;
         });
-
-        // Helper to emit user list for specific room
-        function broadcastGroupUserList(groupName) {
-            const usersInGroup = Object.entries(activeUsers)
-                .filter(([_, u]) => u.group === groupName && !u.hidden) // Filter hidden monitors
-                .map(([id, u]) => ({
-                    id: id,
-                    name: u.name,
-                    ip: u.ip,
-                    isSupervisor: u.isSupervisor // Needed for permissions
-                }));
-            io.to(groupName).emit('user_list', usersInGroup);
-        }
-
-
-
-        broadcastGroupUserList(userGroup);
-
-        // Send group-filtered history (Newest first for UI so we reverse it)
-        const groupHistory = messageHistory.filter(m => m.group === userGroup && !m.isPrivate);
-        socket.emit('history', groupHistory);
-
-        // Send Pinned Message
-        if (pinnedMessages[userGroup]) {
-            socket.emit('pinned_message_update', pinnedMessages[userGroup]);
-        }
-
-        broadcastMonitorUpdate(); // Notify monitors
+        socket.emit('history', userHistory);
     });
 
     socket.on('chat_message', (payload) => {
         const user = activeUsers[socket.id];
         if (!user) return;
+        console.log(`[EVENT] chat_message from ${user.username}`);
 
-        // payload can be string (old) or object { text, image, ... }
         const text = (typeof payload === 'string') ? payload : payload.text;
         const image = payload.image || null;
 
-        // RESTRICTION: Block images for EEL group
-        // RESTRICTION: In EEL, only Supervisor can broadcast images
-        if (image && user.group === 'EEL' && !user.isSupervisor) {
-            socket.emit('message', {
-                system: true,
-                text: '🚫 Solo el SUPERVISOR puede enviar imágenes a este grupo.',
-                timestamp: Date.now()
-            });
-            return;
-        }
-
         const messageData = {
-            id: Date.now() + Math.random(),
+            id: String(Date.now() + Math.random()),
             text: text,
             image: image,
             sender: user.name,
+            username: user.username,
             senderId: socket.id,
-            senderIp: user.ip,
-            group: user.group,
-            isPrivate: false,
+            office: user.office,
+            phone: user.phone,
             timestamp: Date.now()
+            // No forced group here, we can have 1:1 or specific channels later
         };
 
+        // For now, send to GLOBAL room
+        io.to('GLOBAL').emit('message', messageData);
         messageHistory.push(messageData);
-        if (messageHistory.length > 50) messageHistory.shift(); // Keep limit small if storing images
-
+        if (messageHistory.length > 200) messageHistory.shift();
         logMessage(messageData);
-
-        // Emit only to group
-        io.to(user.group).emit('message', messageData);
-
-        // Notify Supervisors
-        const supervisorsInGroup = Object.values(activeUsers).filter(u => u.group === user.group && u.isSupervisor && u.authKey !== user.authKey);
-        supervisorsInGroup.forEach(sup => {
-            const supSocketId = Object.keys(activeUsers).find(key => activeUsers[key] === sup);
-            if (supSocketId) {
-                io.to(supSocketId).emit('supervisor_alert', {
-                    sender: user.name,
-                    text: text || '📷 Imagen adjunta', // Fallback details
-                    senderId: socket.id,
-                    isPrivate: false
-                });
-            }
-        });
     });
 
-    socket.on('private_message', (payload) => {
-        // payload: { targetId, text, image, ... }
-        const user = activeUsers[socket.id];
-        const targetId = payload.targetId;
-        const target = activeUsers[targetId];
 
-        if (!user || !target) return;
+    socket.on('private_message', (payload) => {
+        const user = activeUsers[socket.id];
+        const targetUsername = payload.targetId; // This is the username from client
+
+        // Find ANY active session for this username to get their profile data
+        const target = Object.values(activeUsers).find(u => String(u.username).toLowerCase() === String(targetUsername).toLowerCase());
+
+        if (!user || !target) {
+            console.log(`[PRIVATE ERROR] From ${user ? user.username : 'UNK'} to ${targetUsername}. Target found: ${!!target}`);
+            return;
+        }
 
         const text = payload.text;
         const image = payload.image || null;
@@ -604,42 +656,44 @@ io.on('connection', (socket) => {
         }
 
         const messageData = {
-            id: Date.now() + Math.random(),
+            id: String(Date.now() + Math.random()),
             text: text,
             image: image,
             sender: user.name,
+            username: user.username,
             senderId: socket.id,
             senderIp: user.ip,
             targetName: target.name,
-            targetId: targetId,
-            targetIp: target.ip,
+            targetUsername: target.username,
             isPrivate: true,
             timestamp: Date.now()
         };
+        console.log(`[MSG] Private from ${user.username} to ${target.username}: ${text ? text.substring(0, 20) : 'IMAGE'}`);
 
         if (target.isSupervisor) {
-            io.to(targetId).emit('supervisor_alert', {
+            io.to(String(target.username).toLowerCase()).emit('supervisor_alert', {
                 sender: user.name,
                 text: text || '📷 Imagen adjunta',
-                senderId: user.id || socket.id,
+                senderId: String(user.username).toLowerCase(),
                 isPrivate: true
             });
         }
 
-        io.to(targetId).emit('private_message', messageData);
-        socket.emit('private_message', messageData);
+        io.to(String(target.username).toLowerCase()).emit('private_message', messageData);
+        io.to(String(user.username).toLowerCase()).emit('private_message', messageData);
 
+        messageHistory.push(messageData);
+        if (messageHistory.length > 200) messageHistory.shift();
         logMessage(messageData);
     });
 
-    socket.on('typing', (targetId) => {
+    socket.on('typing', (targetUsername) => {
         const user = activeUsers[socket.id];
         if (user) {
-            if (targetId && activeUsers[targetId]) {
-                io.to(targetId).emit('typing', { user: user.name, isPrivate: true, senderId: socket.id });
+            if (targetUsername) {
+                io.to(String(targetUsername).toLowerCase()).emit('typing', { user: user.name, isPrivate: true, senderId: String(user.username).toLowerCase() });
             } else {
-                // Broadcast typing only to group
-                socket.to(user.group).emit('typing', { user: user.name, isPrivate: false });
+                io.to(user.group).emit('typing', { user: user.name, isPrivate: false });
             }
         }
     });
@@ -678,6 +732,39 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('delete_message', (msgId) => {
+        const user = activeUsers[socket.id];
+        if (!user) return;
+
+        const idToSearch = String(msgId);
+
+        // Find message in history
+        const msgIndex = messageHistory.findIndex(m => String(m.id) === idToSearch);
+        if (msgIndex !== -1) {
+            const msg = messageHistory[msgIndex];
+
+            // SECURITY: Only sender can delete, and only if from today
+            const isOwner = msg.username === user.username;
+            const isToday = new Date(msg.timestamp).toDateString() === new Date().toDateString();
+
+            if (isOwner && isToday) {
+                messageHistory.splice(msgIndex, 1);
+                io.emit('message_deleted', msgId);
+
+                // Also update persistent log
+                if (fs.existsSync(LOG_FILE)) {
+                    try {
+                        let logs = JSON.parse(fs.readFileSync(LOG_FILE));
+                        logs = logs.filter(l => String(l.id) !== idToSearch);
+                        fs.writeFileSync(LOG_FILE, JSON.stringify(logs, null, 2));
+                    } catch (e) { }
+                }
+            }
+        } else {
+            io.emit('message_deleted', msgId);
+        }
+    });
+
     socket.on('disconnect', () => {
         const user = activeUsers[socket.id];
         if (user) {
@@ -691,17 +778,19 @@ io.on('connection', (socket) => {
 
             delete activeUsers[socket.id];
 
-            // Re-calc list for that group
-            const usersInGroup = Object.entries(activeUsers)
-                .filter(([_, u]) => u.group === group)
-                .map(([id, u]) => ({
-                    id: id,
-                    name: u.name,
-                    ip: u.ip
-                }));
+            // Re-calc FULL list for everyone
+            const fullUserList = Object.entries(activeUsers).map(([id, u]) => ({
+                id,
+                username: u.username,
+                name: u.name,
+                office: u.office,
+                ip: u.ip,
+                phone: u.phone,
+                isSupervisor: u.isSupervisor
+            }));
 
-            io.to(group).emit('user_list', usersInGroup);
-            broadcastMonitorUpdate(); // Notify monitors
+            io.emit('user_list', fullUserList);
+            broadcastMonitorUpdate();
         }
     });
 });
@@ -759,9 +848,3 @@ setInterval(() => {
     }
 }, 30000); // Check every 30s
 
-
-const PORT = process.env.PORT || 3005;
-server.listen(PORT, () => {
-    console.log(`Chat-ELL Server running on port ${PORT}`);
-    console.log(`Allowed IPs: 172.27.50.1 - 172.27.60.255 (+Localhost)`);
-});

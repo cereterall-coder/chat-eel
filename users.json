@@ -112,5 +112,19 @@
   },
   "SUPERVISOR:@SGSGSG@": {
     "created": 1768761597366
+  },
+  "amalviva": {
+    "passwordHash": "$2b$10$bDKzl8PuOlMlMZvxAOEtuOXEAHBl4Rl8nBN8rkydbOysBk2ZbnVsK",
+    "phone": "944499069",
+    "office": "OSI",
+    "fullName": "Amaro Vilela",
+    "created": 1771201249583
+  },
+  "Alexis": {
+    "passwordHash": "$2b$10$mdm0sSUZ3zKVT5DY/DNhPOpjY1LdwS.DhtHQdpznCv/fwV3p.hLFy",
+    "phone": "943156490",
+    "office": "osi",
+    "fullName": "Alexis Vilela",
+    "created": 1771207296208
   }
 }
